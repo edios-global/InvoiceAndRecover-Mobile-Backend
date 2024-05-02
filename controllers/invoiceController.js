@@ -2,7 +2,7 @@ import asyncHandler from 'express-async-handler'
 import genericResponse from '../routes/genericWebResponses.js';
 import mongoose from 'mongoose';
 import Contacts from '../models/contactModel.js';
-import { copyFile, getNextSequenceValue, sendMailBySendGrid, uploadInvoiceFile, uploadQuotationFile, validateEmail } from '../routes/genericMethods.js';
+import { copyFile, getNextSequenceValue, sendMailBySendGrid, uploadInvoiceFile, uploadQuotationFile, uploadRctiFile, validateEmail } from '../routes/genericMethods.js';
 import DefaultSetting from '../models/defaultSettingsModel.js';
 import Quotations from '../models/quotationModel.js';
 import InvoiceModel from '../models/invoiceModel.js';
@@ -11,9 +11,16 @@ import InvoiceDocuments from '../models/invoiceDocumentsModel.js';
 import items from '../models/itemsModel.js';
 import Templates from '../models/templatesModel.js';
 import InvoiceRetentionPaymentsModel from '../models/invoiceRetentionModel.js';
+import RCTI from '../models/rctiModel.js';
+import RCTI_Items from '../models/rctiItemsModel.js';
+import RCTI_Documents from '../models/rctiDocumentsModel.js';
 
 
 // Mobile API ------------->
+
+
+// INVOICE
+
 const fetchQuotationInInvoice = asyncHandler(async (req, res) => {
     const post = req.body;
     try {
@@ -1072,6 +1079,7 @@ const submitInvoicePaymentDetails = asyncHandler(async (req, res) => {
     }
 });
 
+// DEBTS
 
 const fetchDebts = asyncHandler(async (req, res) => {
     const post = req.body;
@@ -1176,6 +1184,8 @@ const fetchDebts = asyncHandler(async (req, res) => {
     }
 });
 
+// RCTI
+
 const fetchSupplierForRCTI = asyncHandler(async (req, res) => {
     const post = req.body;
     try {
@@ -1204,23 +1214,80 @@ const fetchSupplierForRCTI = asyncHandler(async (req, res) => {
 const addRCTI = asyncHandler(async (req, res) => {
     let post = req.body;
     try {
+        console.log("post(addRCTI)", post);
+        console.log("post(files)", req.files);
 
         let query = { businessUserID: mongoose.Types.ObjectId(post.businessUserID) };
-        const fetchDefaultSetting = await DefaultSetting.findOne(query, { rctiPrefix: 1, rctiStartNumber: 1, });
+        const fetchDefaultSetting = await DefaultSetting.findOne(query, { rctiPrefix: 1, rctiStartNumber: 1, currencyValue: 1 });
         if (fetchDefaultSetting && fetchDefaultSetting.rctiPrefix && fetchDefaultSetting.rctiStartNumber) {
 
             const RCTIStartNumber = await getNextSequenceValue("rctiNumber", post.businessUserID, fetchDefaultSetting.rctiStartNumber);
             if (!RCTIStartNumber) {
                 return res.status(200).json(genericResponse(false, "RCTI not Added. Error in generating RCTI Number.", []));
             }
+            if (post.DiscountType == 'undefined') {
+                post.DiscountType = ''
+            }
+            if (post.totalDiscountAmount == 'undefined') {
+                post.totalDiscountAmount = ''
+            }
 
             post.rctiSequenceNumber = RCTIStartNumber;
             post.rctiNumber = fetchDefaultSetting.rctiPrefix + "-" + RCTIStartNumber;
             post.createdDate = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
+            post.rctiDate = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
             post.recordType = "I";
+            console.log("post(01)", post);
+            post.currencyValue = fetchDefaultSetting.currencyValue;
+
+            post.rctiStatus = "Unpaid";
 
             const addedRCTI = await new RCTI(post).save();
             if (addedRCTI._id) {
+
+                // Parse the JSON string into an array of objects
+                let ItemsList = JSON.parse(post.ItemsList);
+                let addedInvoiceItem = []
+                for (const element of ItemsList) {
+                    console.log("addinvoice element :-", element);
+                    delete element.createdDate;
+                    delete element.recordType;
+                    delete element.lastModifiedDate;
+                    element.itemPrice = parseFloat(element.itemPrice).toFixed(2);
+                    element.itemQuantity = parseFloat(element.itemQuantity).toFixed(2);
+                    element.gst = parseFloat(element.gst).toFixed(2);
+                    element.priceValidityValue = parseFloat(element.priceValidityValue).toFixed(2);
+                    element.discountValue = parseFloat(element.discountValue).toFixed(2);
+                    // Assuming you want to set discountAmount to 0 here since it's not provided in the input
+                    element.discountAmount = 0;
+                    element.createdDate = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
+                    element.recordType = "I";
+                    element.itemID = element._id;
+                    element.rctiID = addedRCTI._id;
+                    addedInvoiceItem = await new RCTI_Items(element).save();
+                }
+
+
+                // if (addedInvoiceItem) {
+                //     let DocList = [];
+
+                //     for (const doc of req.files.file) {
+
+                //         doc.recordType = "I";
+                //         doc.rctiID = addedRCTI._id;
+                //         const returnedFileName = await uploadInvoiceFile(req, post.documentName, "invoiceDocuments");
+                //         doc.documentFileName = returnedFileName;
+                //         doc.referenceFolder = "rctiDocuments/" + post.rctiID.toString();
+                //         doc.createdDate = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
+                //         doc.uploadedDateTime = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
+                //         console.log("req doc :-", doc);
+                //         DocList.push(doc);
+
+                //     }
+                //     let InsertDocs = await RCTI_Documents.insertMany(DocList);
+                // } else {
+                //     return res.status(200).json(genericResponse(false, "rcti Added Successfully. Error in saving rcti Items.", { _id: addedRCTI._id }));
+                // }
                 return res.status(200).json(genericResponse(true, "RCTI Added Successfully.", { _id: addedRCTI._id }));
             } else {
                 return res.status(200).json(genericResponse(false, "RCTI not Added.", []));
@@ -1234,6 +1301,380 @@ const addRCTI = asyncHandler(async (req, res) => {
         return res.status(400).json(genericResponse(false, error.message, []));
     }
 });
+
+const fetchRCTI = asyncHandler(async (req, res) => {
+    const post = req.body;
+    console.log("post", post);
+    try {
+        let query = {
+            businessUserID: mongoose.Types.ObjectId(post.businessUserID)
+        };
+        console.log("Dzf", query);
+        const fetched = await RCTI.aggregate([
+            {
+                $match: query
+            },
+            {
+                $lookup: {
+                    from: 'contacts',
+                    localField: "supplierID",
+                    foreignField: "_id",
+                    as: "contact"
+                }
+            },
+            {
+                $unwind: {
+                    path: "$contact",
+                    preserveNullAndEmptyArrays: true
+                }
+            },
+
+            {
+                $project: {
+
+                    _id: 1,
+                    rctiNumber: 1,
+                    rctiStatus: 1,
+                    supplierID: 1,
+                    businessUserID: 1,
+                    supplierName: "$contact.name",
+                    quotationName: "$quotation.quotationNumber",
+                    rctiDate1: 1,
+                    rctiDate: {
+                        $concat: [
+                            {
+                                $let: {
+                                    vars: {
+                                        monthsInString: [, 'Jan ', 'Feb ', 'Mar ', 'Apr ', 'May ', 'Jun ', 'Jul ', 'Aug ', 'Sep ', 'Oct ', 'Nov ', 'Dec ']
+                                    },
+                                    in: {
+                                        $arrayElemAt: ['$$monthsInString', { $month: "$rctiDate" }]
+                                    }
+                                }
+                            },
+                            { $dateToString: { format: "%d", date: "$rctiDate" } }, ", ",
+                            { $dateToString: { format: "%Y", date: "$rctiDate" } },
+                        ]
+                    },
+                    dueDate1: 1,
+                    dueDate: {
+                        $concat: [
+                            {
+                                $let: {
+                                    vars: {
+                                        monthsInString: [, 'Jan ', 'Feb ', 'Mar ', 'Apr ', 'May ', 'Jun ', 'Jul ', 'Aug ', 'Sep ', 'Oct ', 'Nov ', 'Dec ']
+                                    },
+                                    in: {
+                                        $arrayElemAt: ['$$monthsInString', { $month: "$dueDate" }]
+                                    }
+                                }
+                            },
+                            { $dateToString: { format: "%d", date: "$dueDate" } }, ", ",
+                            { $dateToString: { format: "%Y", date: "$dueDate" } },
+                        ]
+                    },
+                }
+            },
+
+        ]);
+
+        if (fetched.length > 0) {
+
+            let successResponse = genericResponse(true, "RCTI fetched successfully.", fetched);
+            res.status(200).json(successResponse);
+        } else {
+            let errorRespnse = genericResponse(false, "RCTI is not found.", []);
+            res.status(204).json(errorRespnse);
+            return;
+        }
+
+    } catch (error) {
+        console.log("Error in fetchInvoices:", error.message);
+        return res.status(400).json(genericResponse(false, error.message, []));
+    }
+});
+
+const fetchRCTIDetailsByID = asyncHandler(async (req, res) => {
+    const post = req.body;
+    try {
+        console.log("fetchRCTIDetailsByID post:", post);
+        if (!post.businessUserID) return res.status(204).json(genericResponse(false, "Business UserID is missing.", []));
+        var query = { _id: mongoose.Types.ObjectId(post.rctiID) };
+        let fetch = await RCTI.aggregate([
+            { $match: query },
+            {
+                $lookup: {
+                    from: "rcti_items",
+                    localField: "_id",
+                    foreignField: "rctiID",
+                    as: "rctiItems",
+
+                }
+            },
+            { $unwind: { path: "$rctiItems", preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: "rcti_documents",
+                    localField: "_id",
+                    foreignField: "rctiID",
+                    as: "rctiDocuments",
+
+                }
+            },
+            { $unwind: { path: "$rctiDocuments", preserveNullAndEmptyArrays: true } },
+
+            {
+                $lookup: {
+                    from: "contacts",
+                    localField: "supplierID",
+                    foreignField: "_id",
+                    as: "contacts",
+
+                }
+            },
+            { $unwind: { path: "$contacts", preserveNullAndEmptyArrays: true } },
+
+            {
+                $project: {
+                    _id: 1,
+                    rctiItems: 1,
+                    rctiDocuments: 1,
+                    rctiNumber: 1,
+                    supplierID: 1,
+                    contacts: 1,
+
+                    dueDate: {
+                        $dateToString: {
+                            format: "%Y-%m-%d", // Specify the desired format here
+                            date: "$dueDate"
+                        }
+                    },
+                    dueUpto: 1,
+                    rctiDate: {
+                        $dateToString: {
+                            format: "%Y-%m-%d", // Specify the desired format here
+                            date: "$rctiDate"
+                        }
+                    },
+                    purchaseOrderNumber: 1,
+                    rctiStatus: 1,
+                    gstType: 1,
+                    totalAmount: 1,
+                    totalDiscountAmount: 1,
+                    finalAmount: 1,
+
+                    paymentInstruction: 1,
+                }
+            }
+
+
+        ])
+        if (fetch.length > 0) {
+
+            let successResponse = genericResponse(true, "Rcti details fetched successfully.", fetch);
+            res.status(200).json(successResponse);
+        } else {
+            let errorRespnse = genericResponse(false, "Rcti details not found.", []);
+            res.status(202).json(errorRespnse);
+            return;
+        }
+    } catch (error) {
+        console.log("error in fetchRCTIDetailsByID =", error);
+        let errorRespnse = genericResponse(false, error.message, []);
+        res.status(400).json(errorRespnse);
+    }
+});
+
+const updateRCTI = asyncHandler(async (req, res) => {
+    try {
+        let post = req.body;
+        delete post._id;
+        console.log("updateRCTI req.body: ", post);
+        return
+        if (!post.rctiID) {
+            return res.status(204).json(genericResponse(false, "rcti ID is missing.", []));
+        }
+        post.totalAmount = parseFloat(post.totalAmount).toFixed(2);
+        post.totalDiscountAmount = parseFloat(post.totalDiscountAmount).toFixed(2);
+        post.finalAmount = parseFloat(post.finalAmount).toFixed(2);
+        // if (post.invoiceStatus === "Unpaid") { post.payablePendingAmount = post.finalAmount; }
+        let Items = JSON.parse(post.ItemsList);
+        let ItemsList = [];
+        for (const element of Items) {
+            delete element._id;
+            element.itemPrice = parseFloat(element.itemPrice).toFixed(2);
+            element.itemQuantity = parseFloat(element.itemQuantity).toFixed(2);
+            let gstValue = parseFloat(element.gst).toFixed(2);
+            // element.priceValidityValue = parseFloat(element.priceValidityValue).toFixed(2);
+            element.discountValue = parseFloat(element.discountValue).toFixed(2);
+            element.discountAmount = parseFloat(element.discountAmount).toFixed(2);
+
+            // delete element.gst;
+            // await RCTI_Items.updateOne(
+            //     { _id: mongoose.Types.ObjectId(element.itemID) },
+            //     { $set: element }
+            // );
+
+            element.gst = gstValue;
+            element.lastModifiedDate = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
+            element.recordType = "U";
+            element.rctiID = post.rctiID;
+            ItemsList.push(element);
+            console.log("ItemsList: ", ItemsList);
+        }
+        if (ItemsList) {
+            await RCTI_Items.deleteMany({ rctiID: mongoose.Types.ObjectId(post.rctiID) });
+            let insertItems = await RCTI_Items.insertMany(ItemsList);
+
+            if (insertItems) {
+                let updateRCTI = null;
+                post.recordType = "U";
+                post.lastModifiedDate = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
+
+                updateRCTI = await RCTI.updateOne(
+                    { _id: mongoose.Types.ObjectId(post.rctiID) }, { $set: post }
+                );
+
+                console.log("updateRCTI :-", updateRCTI);
+
+                if (post.documentName) {
+                    if (!req.files) {
+                        return res.status(200).json(genericResponse(false, "File is missing.", []));
+                    }
+                    const isDocumentExist = await RCTI_Documents.findOne({ rctiID: mongoose.Types.ObjectId(post.rctiID), documentName: post.documentName });
+                    if (isDocumentExist) {
+                        console.log("url", process.env.LOCATION_PATH + `${isDocumentExist.documentFileName}`);
+                        var fs = require("fs");
+                        fs.unlink(
+                            process.env.LOCATION_PATH + `/${isDocumentExist.documentFileName}`,
+                            function (err) {
+                                if (err) {
+                                    throw err;
+                                }
+                            }
+                        );
+                        const returnedFileName = await uploadRctiFile(req, post.documentName, "invoiceDocuments");
+                        post.documentFileName = returnedFileName;
+                        post.referenceFolder = "invoiceDocuments/" + post.rctiID.toString();
+                        post.uploadedDateTime = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
+                        post.recordType = "U";
+                        const existingDoc = await RCTI_Documents.findOneAndUpdate(
+                            { rctiID: mongoose.Types.ObjectId(post.rctiID), documentName: post.documentName },
+                            { $set: post },
+                            { new: true, useFindAndModify: false }
+                        );
+
+                    }
+                } else {
+                    const returnedFileName = await uploadRctiFile(req, post.documentName, "invoiceDocuments");
+                    post.documentFileName = returnedFileName;
+                    post.referenceFolder = "invoiceDocuments/" + post.rctiID.toString();
+                    post.uploadedDateTime = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
+                    post.createdDate = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
+                    const insertedDoc = await RCTI_Documents(post).save();
+                }
+            }
+            if (updateRCTI.n === 1) {
+                //Send Email to Customer if "post.hasQuo_DocumentFile" is true and quotationStatus is Pending only.
+                // const fetchInvoice = await InvoiceModel.aggregate([
+                //     { $match: { _id: mongoose.Types.ObjectId(post.invoiceID) } },
+                //     {
+                //         $lookup: {
+                //             from: 'contacts',
+                //             localField: "contactID",
+                //             foreignField: "_id",
+                //             as: "contact"
+                //         }
+                //     },
+                //     { $unwind: '$contact' },
+                //     {
+                //         $project: {
+                //             _id: 1,
+                //             invoiceNumber: 1,
+                //             invoiceStatus: 1,
+                //             customerName: "$contact.name",
+                //             customerEmail: "$contact.emailAddress",
+                //             invoiceDate: {
+                //                 $concat: [
+                //                     {
+                //                         $let: {
+                //                             vars: {
+                //                                 monthsInString: [, 'Jan ', 'Feb ', 'Mar ', 'Apr ', 'May ', 'Jun ', 'Jul ', 'Aug ', 'Sep ', 'Oct ', 'Nov ', 'Dec ']
+                //                             },
+                //                             in: {
+                //                                 $arrayElemAt: ['$$monthsInString', { $month: "$invoiceDate" }]
+                //                             }
+                //                         }
+                //                     },
+                //                     { $dateToString: { format: "%d", date: "$invoiceDate" } }, ", ",
+                //                     { $dateToString: { format: "%Y", date: "$invoiceDate" } },
+                //                 ]
+                //             },
+                //             dueDate: {
+                //                 $concat: [
+                //                     {
+                //                         $let: {
+                //                             vars: {
+                //                                 monthsInString: [, 'Jan ', 'Feb ', 'Mar ', 'Apr ', 'May ', 'Jun ', 'Jul ', 'Aug ', 'Sep ', 'Oct ', 'Nov ', 'Dec ']
+                //                             },
+                //                             in: {
+                //                                 $arrayElemAt: ['$$monthsInString', { $month: "$dueDate" }]
+                //                             }
+                //                         }
+                //                     },
+                //                     { $dateToString: { format: "%d", date: "$dueDate" } }, ", ",
+                //                     { $dateToString: { format: "%Y", date: "$dueDate" } },
+                //                 ]
+                //             },
+                //         }
+                //     },
+
+                // ]);
+                // if (fetchInvoice.length > 0 && (fetchInvoice[0].invoiceStatus === 'Unpaid' && post.hasQuo_DocumentFile)) {
+
+                //     let emailSubject = '';
+                //     let emailBody = '';
+                //     const templateQuery = { templateStatus: 'Active', templateName: 'NewUnpaidInvoicesCustomerNotification' };
+                //     const fetchedTemplates = await Templates.find(templateQuery);
+                //     if (fetchedTemplates.length > 0) {
+                //         let LINK = process.env.URL + "invoice/" + fetchInvoice[0].invoiceNumber + "/" + fetchInvoice[0]._id;
+                //         let val = fetchedTemplates[0];
+
+                //         val.templateSubject = val.templateSubject.replaceAll('[InvoiceNumber]', fetchInvoice[0].invoiceNumber);
+                //         val.templateSubject = val.templateSubject.replaceAll('[CustomerName]', fetchInvoice[0].customerName);
+                //         emailSubject = val.templateSubject;
+
+                //         val.templateMessage = val.templateMessage.replaceAll('[CustomerName]', fetchInvoice[0].customerName);
+                //         val.templateMessage = val.templateMessage.replaceAll('[InvoiceNumber]', fetchInvoice[0].invoiceNumber);
+                //         val.templateMessage = val.templateMessage.replaceAll('[FinalAmount]', fetchInvoice[0].finalAmount);
+                //         val.templateMessage = val.templateMessage.replaceAll('[InvoiceDate]', fetchInvoice[0].invoiceDate);
+                //         val.templateMessage = val.templateMessage.replaceAll('[DueDate]', fetchInvoice[0].dueDate);
+                //         val.templateMessage = val.templateMessage.replaceAll('[URL]', LINK);
+                //         emailBody = val.templateMessage;
+                //         await sendMailBySendGrid(fetchInvoice[0].customerEmail, emailSubject, emailBody);
+                //         return res.status(200).json(genericResponse(true, "Invoice saved successfully and Email sent to the Customer's Email Address.", { _id: post.invoiceID, hasQuo_DocumentFile: post.hasQuo_DocumentFile }));
+                //     } else {
+                //         return res.status(200).json(genericResponse(true, "Invoice Saved successfully but Email not sent. Please configure the Email's templates.", { _id: post.invoiceID, hasQuo_DocumentFile: post.hasQuo_DocumentFile }));
+                //     }
+                // }
+                // else {
+                return res.status(200).json(genericResponse(true, "RCTI updated & saved successfully.", { _id: post.rctiID }));
+                // }
+            } else {
+                return res.status(200).json(genericResponse(false, "RCTI not updated.", []));
+            }
+
+        } else {
+            console.error("Items not inserted or encountered an error.");
+            return res.status(200).json(genericResponse(false, "Items not inserted or encountered an error.", []));
+
+        }
+    } catch (error) {
+        console.log("error in updateRcti==", error.message);
+        return res.status(400).json(genericResponse(false, error.message, []));
+    }
+});
+
 
 const fetchCustomerInInvoice = asyncHandler(async (req, res) => {
     const post = req.body;
@@ -1335,7 +1776,7 @@ const uploadInvoiceDocument = asyncHandler(async (req, res) => {
                         }
                     }
                 );
-                const returnedFileName = await uploadQuotationFile(req, post.documentName, "invoiceDocuments");
+                const returnedFileName = await uploadInvoiceFile(req, post.documentName, "invoiceDocuments");
                 post.documentFileName = returnedFileName;
                 post.referenceFolder = "invoiceDocuments/" + post.invoiceID.toString();
                 post.uploadedDateTime = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
@@ -1689,6 +2130,9 @@ const fetchInvoiceDetailsByIDNew = asyncHandler(async (req, res) => {
     }
 });
 
+
+
+
 export {
     fetchQuotationInInvoice,
     fetchQuotationByID,
@@ -1701,10 +2145,15 @@ export {
     uploadInvoiceDocument,
     deleteInvoiceDocument,
     fetchDebts,
-    fetchSupplierForRCTI,
+
     emailReminderInvoice,
     submitInvoicePaymentDetails,
-    fetchInvoiceDetailsByIDNew
+    fetchInvoiceDetailsByIDNew,
 
-
+    // RCTI
+    fetchSupplierForRCTI,
+    addRCTI,
+    fetchRCTI,
+    fetchRCTIDetailsByID,
+    updateRCTI
 }

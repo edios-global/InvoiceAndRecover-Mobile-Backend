@@ -2,6 +2,7 @@ import expenses from '../models/expensesModel.js';
 import asyncHandler from 'express-async-handler'
 import genericResponse from '../routes/genericWebResponses.js';
 import mongoose from 'mongoose';
+import Contacts from '../models/contactModel.js';
 
 
 
@@ -35,18 +36,95 @@ const addExpense = asyncHandler(async (req, res) => {
     }
 });
 
+const fetchSupplierInExpense = asyncHandler(async (req, res) => {
+    const post = req.body;
+    try {
+
+        if (!post) return res.status(204).json(genericResponse(false, "Request Payload Data is null", []));
+        if (!post.businessUserID) return res.status(204).json(genericResponse(false, "Business UserID is missing.", []));
+        var query = { businessUserID: mongoose.Types.ObjectId(post.businessUserID), contactType: "Supplier", contactStatus: "Active" };
+
+        const fetchContacts = await Contacts.find(query, { _id: 1, name: 1, });
+
+        if (fetchContacts.length > 0) {
+            let successResponse = genericResponse(true, "Supplier Name fetched successfully.", fetchContacts);
+            res.status(200).json(successResponse);
+        } else {
+            let errorRespnse = genericResponse(false, "Supplier Contact : Supplier Name with Active Status is not found.", []);
+            res.status(200).json(errorRespnse);
+            return;
+        }
+    } catch (error) {
+        console.log("error in fetchSupplierForRCTI =", error);
+        let errorRespnse = genericResponse(false, error.message, []);
+        res.status(400).json(errorRespnse);
+    }
+});
+
 const fetchExpenses = asyncHandler(async (req, res) => {
     try {
         const post = req.body;
         console.log('fetchExpenses(post)', post)
         if (post.signatureKey !== process.env.SIGNATURE_KEY) return res.status(200).json(genericResponse(false, 'Invalid Signature Key!', []));
         const query = { businessUserID: mongoose.Types.ObjectId(post.businessUserID) }
-        const fetchExp = await expenses.find(query)
+        let fetchQuery = [
+            {
+                $lookup: {
+                    from: 'contacts',
+                    localField: 'contactTypeId',
+                    foreignField: '_id',
+                    as: 'contacts'
+                }
+            },
+            { $unwind: '$contacts' },
+            {
+                $lookup: {
+                    from: 'itemcatogories',
+                    localField: 'categoryNameID',
+                    foreignField: '_id',
+                    as: 'itemcatogories'
+                }
+            },
+            { $unwind: '$itemcatogories' },
+            {
+                $project: {
+                    _id: 1,
+                    contactTypeId: "$contactTypeId",
+                    categoryNameID: "$categoryNameID",
+                    contactName: "$contacts.name",
+                    categoryName: "$itemcatogories.categoryName",
+                    expenseDate: { $dateToString: { format: '%Y-%m-%d', date: '$expenseDate' } },
+                    // expenseDate: {
+                    //     $concat: [
+                    //         {
+                    //             $let: {
+                    //                 vars: {
+                    //                     monthsInString: [, 'Jan ', 'Feb ', 'Mar ', 'Apr ', 'May ', 'Jun ', 'Jul ', 'Aug ', 'Sep ', 'Oct ', 'Nov ', 'Dec ']
+                    //                 },
+                    //                 in: {
+                    //                     $arrayElemAt: ['$$monthsInString', { $month: "$expenseDate" }]
+                    //                 }
+                    //             }
+                    //         },
+                    //         { $dateToString: { format: "%d", date: "$expenseDate" } }, ", ",
+                    //         { $dateToString: { format: "%Y", date: "$expenseDate" } },
+                    //     ]
+                    // },
+                    notes: "$notes",
+                    totalAmount: "$totalAmount",
+                    taxAmount: "$taxAmount",
+                    tipAmount: "$tipAmount",
+                    businessUserID: "$businessUserID",
+                }
+            },
+            { $match: query },
+        ];
+        const fetchExp = await expenses.aggregate(fetchQuery)
 
         let successResponse = genericResponse(true, "Expenses fetched successfully.", fetchExp);
         res.status(200).json(successResponse);
     } catch (error) {
-        console.log("error in fetchCategory=", error);
+        console.log("error in fetchExpenses=", error);
         let errorRespnse = genericResponse(false, error.message, []);
         res.status(400).json(errorRespnse);
     }
@@ -97,4 +175,5 @@ export {
     fetchExpenses,
     updateExpense,
     deleteExpense,
+    fetchSupplierInExpense
 }

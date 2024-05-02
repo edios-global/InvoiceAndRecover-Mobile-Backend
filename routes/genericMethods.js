@@ -244,6 +244,7 @@ export async function generatePassword() {
         console.log("Catch in generatePassword==", error);
     }
 };
+
 export async function generateTempPassword() {
     try {
         return new Promise(resolve => {
@@ -254,6 +255,7 @@ export async function generateTempPassword() {
         console.log("Catch in generatePassword==", error);
     }
 };
+
 export async function sendMail(receiver, subject, body) {
     try {
         return new Promise(resolve => {
@@ -390,6 +392,7 @@ export async function decryptPassword(password) {
         console.log("Catch in decryptPassword==", error);
     }
 };
+
 export async function templateFilter(name, templateArray) {
     return new Promise(async resolve => {
         let result = "None";
@@ -418,6 +421,7 @@ export async function templateFilter(name, templateArray) {
         }
     });
 };
+
 export async function parameterfilter(code, parameterArray) {
     return new Promise(async resolve => {
         let result = "None";
@@ -436,7 +440,6 @@ export async function parameterfilter(code, parameterArray) {
     });
 };
 
-
 export async function sendEmail(receiver, subject, emailTemplate) {
     try {
         new Promise(resolve => {
@@ -448,7 +451,8 @@ export async function sendEmail(receiver, subject, emailTemplate) {
         console.log("error in catch==", error);
         resolve(false);
     }
-}
+};
+
 export async function sendEmailBySendGrid(receiver, subject, emailTemplate) {
     try {
         console.log("Sending mail using SendGrid");
@@ -474,7 +478,7 @@ export async function sendEmailBySendGrid(receiver, subject, emailTemplate) {
     catch (error) {
         console.log("error in catch==", error);
     }
-}
+};
 
 export async function yelpAPI(fetchAPI) {
     return new Promise(async resolve => {
@@ -525,7 +529,7 @@ export async function generateSequenceValue(sequenceName, id) {
         console.log("Catch in generateSequenceValue==", error);
         return null;
     }
-}
+};
 
 export async function QRGenerator(qrData) {
     try {
@@ -676,7 +680,6 @@ export async function generatePDF(contentArray, fileName) {
     return fileName + '.pdf';
 }
 
-
 export async function appNotification(registrationID, title, body, notificationId) {
     try {
 
@@ -721,13 +724,6 @@ export async function appNotification(registrationID, title, body, notificationI
         console.log("Error in appNotification==" + console.log("error", error));
     }
 };
-
-
-
-
-
-
-
 
 export async function getWarehouse(lat, long, businessUserID, senderCity) {
 
@@ -793,7 +789,7 @@ export async function getNextSequenceValue(sequenceName, id, defaultQuotPrefixVa
             return String(incrementedNum).padStart(originalLength, '0');
         }
         let isQuotationIncrement = await AutoIncrementSequenceValues.findOne({ businessUserID: id, columnName: sequenceName, });
-
+        console.log("isQuotationIncrement", isQuotationIncrement);
         if (isQuotationIncrement) {
             if (isQuotationIncrement.defaultQuotationPrefixNumber === defaultQuotPrefixValue) {
                 const updatedNumber = await incrementNumber(isQuotationIncrement.sequenceValue)
@@ -958,6 +954,54 @@ export async function uploadInvoiceFile(req, imagePrefix, mainFolderName = null)
             });
         } catch (catchederror) {
             console.log("Error in uploadInvoiceFile==", catchederror);
+        }
+    });
+};
+
+export async function uploadRctiFile(req, imagePrefix, mainFolderName = null) {
+    return new Promise(resolve => {
+        try {
+            let fileURL = process.env.LOCATION_PATH;
+            const fs = require("fs")
+            const subfolderName = req.body.rctiID;
+            if (mainFolderName) {
+                fileURL = fileURL + mainFolderName + "/"; // Append the main folder name to the base path
+            }
+            fileURL = fileURL + subfolderName;
+            const newpath = fileURL + "/";
+            const file = req.files && req.files.file; // Check if the file object exists
+            let fileObj = req.files?.file[0];
+            let onlyFileName = imagePrefix;
+            let currentDate = new Date();
+            onlyFileName = onlyFileName + "_" + currentDate.getDate() + (currentDate.getMonth() + 1) + currentDate.getFullYear() + "_" + currentDate.getTime();
+
+
+            let ext = fileObj.name.substring(fileObj.name.indexOf(".", 2), fileObj.size);
+            let newFileName = onlyFileName + ext;
+            fs.access(fileURL, async function (error) {
+                if (error) {
+                    await fs.mkdir(fileURL, { recursive: true }, (err) => {
+                        if (err) throw err;
+                    });
+                };
+                if (file) { // Check if the file object exists before moving the file
+                    if (!fs.existsSync(newpath)) {
+                        fs.mkdirSync(newpath, { recursive: true }); // Create the directory if it does not exist
+                    }
+                    file.mv(`${newpath}${newFileName}`, (err) => {
+                        if (err) {
+                            resolve(err);
+                        } else {
+                            let returnedFileName = mainFolderName ? mainFolderName + "/" + subfolderName + "/" + newFileName : subfolderName + "/" + newFileName;
+                            resolve(returnedFileName);
+                        }
+                    });
+                } else {
+                    resolve('File object is undefined.');
+                }
+            });
+        } catch (catchederror) {
+            console.log("Error in uploadRctiFile==", catchederror);
         }
     });
 };

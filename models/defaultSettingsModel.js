@@ -5,22 +5,16 @@ const defaultSettingsSchema = mongoose.Schema(
         businessUserID: {
             type: mongoose.Schema.Types.ObjectId,
         },
-        invoiceDueDays: {
+        invoiceDues: {
             type: Number,
         },
-        invoiceDueType: {
-            type: String,
-        },
-        invoicePrefix: {
+        invoiceTypes: {
             type: String,
         },
         invoiceStartNumber: {
             type: String,
         },
-        rctiDueDays: {
-            type: Number,
-        },
-        rctiDueType: {
+        invoicePrefix: {
             type: String,
         },
         rctiPrefix: {
@@ -29,10 +23,16 @@ const defaultSettingsSchema = mongoose.Schema(
         rctiStartNumber: {
             type: String,
         },
+        rctiDues: {
+            type: Number,
+        },
+        rctiTypes: {
+            type: String,
+        },
         creditNotePrefix: {
             type: String,
         },
-        creditNoteStartNumber: {
+        creditNoteNumber: {
             type: String,
         },
         quotationPrefix: {
@@ -41,10 +41,22 @@ const defaultSettingsSchema = mongoose.Schema(
         quotationStartNumber: {
             type: String,
         },
-        quotationDueDays: {
+        quotationDues: {
             type: Number,
         },
-        quotationDueType: {
+        quotationTypes: {
+            type: String,
+        },
+        currencyValue: {
+            type: String,
+        },
+        signatureFilePath: {
+            type: String,
+        },
+        signatureUploadedDate: {
+            type: Date
+        },
+        defaultLogoFileName: {
             type: String,
         },
         createdDate: {
@@ -58,23 +70,11 @@ const defaultSettingsSchema = mongoose.Schema(
         lastModifiedBy: {
             type: Number,
         },
-        currencyValue: {
+        recordType: {
             type: String,
-        },
-        signatureFilePath: {
-            type: String,
-        },
-        signatureUploadedDate: {
-            type: Date,
-        },
-        defaultLogoFileName: {
-            type: String,
-        },
-        // recordType: {
-        //     type: String,
-        //     required: true,
-        //     default: 'I',
-        // }
+            required: true,
+            default: 'I',
+        }
     }
 )
 

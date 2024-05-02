@@ -246,7 +246,7 @@ const fetchItems = asyncHandler(async (req, res) => {
     const query = { businessUserID: mongoose.Types.ObjectId(post.businessUserID) }
 
     const fetchUser = await items.find(query);
-    console.log("fetchItems=", fetchUser);
+    // console.log("fetchItems=", fetchUser);
     // const fetchUser = await Contacts.aggregate([
     //   {
     //     $match: query

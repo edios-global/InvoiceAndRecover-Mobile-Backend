@@ -3,6 +3,12 @@ import asyncHandler from 'express-async-handler'
 import genericResponse from '../routes/genericWebResponses.js';
 import mongoose from 'mongoose';
 import DefaultSetting from '../models/defaultSettingsModel.js'
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+require('dotenv').config();
+const fs = require('fs');
+const path = require('path');
+
 
 const fetchDefaultSetting = asyncHandler(async (req, res) => {
   try {
@@ -131,6 +137,10 @@ const fetchDefaultSettings = asyncHandler(async (req, res) => {
 const addorUpdateDefaultSettings = asyncHandler(async (req, res) => {
   try {
     const post = req.body;
+
+    console.log("df", post);
+    // console.log("req.files", req.files);
+
     const query = { businessUserID: mongoose.Types.ObjectId(post.businessUserID) }
     if (post.signatureFilePath) {
       post.signatureUploadedDate = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
@@ -141,7 +151,10 @@ const addorUpdateDefaultSettings = asyncHandler(async (req, res) => {
     }
 
     let fetch = await DefaultSetting.findOne(query);
+    console.log("fetch", fetch);
     if (fetch) {
+      post.recordType = "U";
+      post.lastModifiedDate = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
       await DefaultSetting.updateOne(query, { $set: post });
       let successResponse = genericResponse(true, "updated successfully.", []);
       res.status(200).json(successResponse);
@@ -164,16 +177,19 @@ const addorUpdateDefaultSettings = asyncHandler(async (req, res) => {
 const uploadBusinessUserSignature = asyncHandler(async (req, res) => {
   const post = req.body;
   try {
+    // console.log("post", post);
 
     if (!post.businessUserID) {
       return res.status(200).json(genericResponse(false, "businessUser ID is missing.", []));
     }
-    const imageData = req.body.imageData;
+    const imageData = req.body.file;
     const base64Data = imageData.replace(/^data:image\/jpg;base64,/, '');
-
     const filename = `Signature_${Date.now()}.jpg`;
+    console.log("filename", filename);
     const subFolder = 'Signature/' + post.businessUserID.toString();
+    console.log("subFolder", subFolder);
     const uploadDir = path.join(process.env.LOCATION_PATH, subFolder);
+    console.log("uploadDir", uploadDir);
 
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
@@ -191,6 +207,43 @@ const uploadBusinessUserSignature = asyncHandler(async (req, res) => {
 
   } catch (error) {
     console.log("Error in UpdateBusinessUserSignature:", error.message);
+    return res.status(400).json(genericResponse(false, error.message, []));
+  }
+});
+
+const uploadBusinessUserlogo = asyncHandler(async (req, res) => {
+  const post = req.body;
+  try {
+    // console.log("post", post);
+
+    if (!post.businessUserID) {
+      return res.status(200).json(genericResponse(false, "businessUser ID is missing.", []));
+    }
+    const imageData = req.body.file;
+    const base64Data = imageData.replace(/^data:image\/jpg;base64,/, '');
+    const filename = `Logo_${Date.now()}.jpg`;
+    console.log("filename", filename);
+    const subFolder = 'Logo/' + post.businessUserID.toString();
+    console.log("subFolder", subFolder);
+    const uploadDir = path.join(process.env.LOCATION_PATH, subFolder);
+    console.log("uploadDir", uploadDir);
+
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    fs.writeFile(path.join(uploadDir, filename), base64Data, 'base64', async (err) => {
+      if (err) {
+        console.error(err);
+        return res.status(500).json(genericResponse(false, err, []));
+      }
+      let returnedFileName = subFolder + '/' + filename;
+      console.log('defaultLogoFileName saved successfully in fs', returnedFileName);
+
+      return res.status(200).json(genericResponse(true, "Signature saved successfully. Please Click to Save for Configure the Setting", { defaultLogoFileName: returnedFileName }));
+    });
+
+  } catch (error) {
+    console.log("Error in uploadBusinessUserlogo:", error.message);
     return res.status(400).json(genericResponse(false, error.message, []));
   }
 });
@@ -317,7 +370,21 @@ const updateDefaultSettings = asyncHandler(async (req, res) => {
   }
 });
 
-
+const fetchDefaultSettingCurrency = asyncHandler(async (req, res) => {
+  try {
+    const { businessUserID } = req.body;
+    const result = await DefaultSetting.findOne({ businessUserID: mongoose.Types.ObjectId(businessUserID) });
+    console.log("result", result);
+    if (result) {
+      return res.status(200).json(genericResponse(true, "fetch Data Successfully!", result.currencyValue));
+    } else {
+      return res.status(200).json(genericResponse(false, "Please set default currency in Default Settings.", []));
+    }
+  } catch (error) {
+    console.log("Error in fetch DefaultSetting Currency:", error.message);
+    return res.status(400).json(genericResponse(false, error.message, []));
+  }
+});
 
 export {
   fetchDefaultSetting,
@@ -330,9 +397,11 @@ export {
   fetchDefaultSettings,
   addorUpdateDefaultSettings,
   uploadBusinessUserSignature,
+  uploadBusinessUserlogo,
   viewUploadedBusinessUserSignature,
   deleteBusinessUserSignature,
   updateDefaultSettings,
-  updateBusinessUserSignature
+  updateBusinessUserSignature,
+  fetchDefaultSettingCurrency
 
 }
