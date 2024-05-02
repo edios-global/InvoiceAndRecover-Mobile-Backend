@@ -1489,13 +1489,16 @@ const updateRCTI = asyncHandler(async (req, res) => {
     try {
         let post = req.body;
         delete post._id;
-        console.log("updateRCTI req.body: ", post);
-        return
+        console.log("updateRCTI post: ", post);
+
         if (!post.rctiID) {
             return res.status(204).json(genericResponse(false, "rcti ID is missing.", []));
         }
         post.totalAmount = parseFloat(post.totalAmount).toFixed(2);
-        post.totalDiscountAmount = parseFloat(post.totalDiscountAmount).toFixed(2);
+        if (post.totalDiscountAmount) {
+            post.totalDiscountAmount = parseFloat(post.totalDiscountAmount).toFixed(2);
+        }
+
         post.finalAmount = parseFloat(post.finalAmount).toFixed(2);
         // if (post.invoiceStatus === "Unpaid") { post.payablePendingAmount = post.finalAmount; }
         let Items = JSON.parse(post.ItemsList);
@@ -1516,8 +1519,8 @@ const updateRCTI = asyncHandler(async (req, res) => {
             // );
 
             element.gst = gstValue;
-            element.lastModifiedDate = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
-            element.recordType = "U";
+            element.createdDate = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
+
             element.rctiID = post.rctiID;
             ItemsList.push(element);
             console.log("ItemsList: ", ItemsList);
@@ -1525,56 +1528,59 @@ const updateRCTI = asyncHandler(async (req, res) => {
         if (ItemsList) {
             await RCTI_Items.deleteMany({ rctiID: mongoose.Types.ObjectId(post.rctiID) });
             let insertItems = await RCTI_Items.insertMany(ItemsList);
-
+            let updateRCTIs = null;
             if (insertItems) {
-                let updateRCTI = null;
+
                 post.recordType = "U";
                 post.lastModifiedDate = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
 
-                updateRCTI = await RCTI.updateOne(
+                console.log("post07: ", post);
+
+                updateRCTIs = await RCTI.updateOne(
                     { _id: mongoose.Types.ObjectId(post.rctiID) }, { $set: post }
                 );
 
-                console.log("updateRCTI :-", updateRCTI);
+                console.log("updateRCTI", updateRCTIs);
+                // if (post.documentName !== '[]') {
 
-                if (post.documentName) {
-                    if (!req.files) {
-                        return res.status(200).json(genericResponse(false, "File is missing.", []));
-                    }
-                    const isDocumentExist = await RCTI_Documents.findOne({ rctiID: mongoose.Types.ObjectId(post.rctiID), documentName: post.documentName });
-                    if (isDocumentExist) {
-                        console.log("url", process.env.LOCATION_PATH + `${isDocumentExist.documentFileName}`);
-                        var fs = require("fs");
-                        fs.unlink(
-                            process.env.LOCATION_PATH + `/${isDocumentExist.documentFileName}`,
-                            function (err) {
-                                if (err) {
-                                    throw err;
-                                }
-                            }
-                        );
-                        const returnedFileName = await uploadRctiFile(req, post.documentName, "invoiceDocuments");
-                        post.documentFileName = returnedFileName;
-                        post.referenceFolder = "invoiceDocuments/" + post.rctiID.toString();
-                        post.uploadedDateTime = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
-                        post.recordType = "U";
-                        const existingDoc = await RCTI_Documents.findOneAndUpdate(
-                            { rctiID: mongoose.Types.ObjectId(post.rctiID), documentName: post.documentName },
-                            { $set: post },
-                            { new: true, useFindAndModify: false }
-                        );
+                //     if (!req.files) {
+                //         return res.status(200).json(genericResponse(false, "File is missing.", []));
+                //     }
+                //     const isDocumentExist = await RCTI_Documents.findOne({ rctiID: mongoose.Types.ObjectId(post.rctiID), documentName: post.documentName });
+                //     if (isDocumentExist) {
+                //         console.log("url", process.env.LOCATION_PATH + `${isDocumentExist.documentFileName}`);
+                //         var fs = require("fs");
+                //         fs.unlink(
+                //             process.env.LOCATION_PATH + `/${isDocumentExist.documentFileName}`,
+                //             function (err) {
+                //                 if (err) {
+                //                     throw err;
+                //                 }
+                //             }
+                //         );
+                //         const returnedFileName = await uploadRctiFile(req, post.documentName, "invoiceDocuments");
+                //         post.documentFileName = returnedFileName;
+                //         post.referenceFolder = "invoiceDocuments/" + post.rctiID.toString();
+                //         post.uploadedDateTime = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
+                //         post.recordType = "U";
+                //         const existingDoc = await RCTI_Documents.findOneAndUpdate(
+                //             { rctiID: mongoose.Types.ObjectId(post.rctiID), documentName: post.documentName },
+                //             { $set: post },
+                //             { new: true, useFindAndModify: false }
+                //         );
 
-                    }
-                } else {
-                    const returnedFileName = await uploadRctiFile(req, post.documentName, "invoiceDocuments");
-                    post.documentFileName = returnedFileName;
-                    post.referenceFolder = "invoiceDocuments/" + post.rctiID.toString();
-                    post.uploadedDateTime = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
-                    post.createdDate = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
-                    const insertedDoc = await RCTI_Documents(post).save();
-                }
+                //     }
+                // } else {
+                //     const returnedFileName = await uploadRctiFile(req, post.documentName, "invoiceDocuments");
+                //     post.documentFileName = returnedFileName;
+                //     post.referenceFolder = "invoiceDocuments/" + post.rctiID.toString();
+                //     post.uploadedDateTime = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
+                //     post.createdDate = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
+                //     const insertedDoc = await RCTI_Documents(post).save();
+                // }
+
             }
-            if (updateRCTI.n === 1) {
+            if (updateRCTIs.n === 1) {
                 //Send Email to Customer if "post.hasQuo_DocumentFile" is true and quotationStatus is Pending only.
                 // const fetchInvoice = await InvoiceModel.aggregate([
                 //     { $match: { _id: mongoose.Types.ObjectId(post.invoiceID) } },
