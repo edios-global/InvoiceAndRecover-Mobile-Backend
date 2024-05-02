@@ -16,7 +16,7 @@ import { fetchInvoiceReminderTemplates, updateInvoiceReminderTemplate } from '..
 import { addQuotation, deleteQuotationDocument, fetchContactsInQuotation, fetchQuotation, fetchQuotationDetailsByID, updateQuotation, uploadQuotationDocument } from '../controllers/quotationController.js';
 import { fetchParameterListForGST } from '../controllers/parameterController.js';
 import { fetchInvoiceReminderLogs } from '../controllers/invoiceReminderLogController.js';
-import { addInvoice, addRCTI, deleteInvoiceDocument, emailReminderInvoice, fetchCustomerInInvoice, fetchDebts, fetchInvoiceDetailsByID, fetchInvoiceDetailsByIDNew, fetchInvoices, fetchItemsForInvoice, fetchQuotationByID, fetchQuotationInInvoice, fetchRCTI, fetchRCTIDetailsByID, fetchSupplierForRCTI, submitInvoicePaymentDetails, updateInvoice, uploadInvoiceDocument } from '../controllers/invoiceController.js';
+import { addInvoice, addRCTI, deleteInvoiceDocument, emailReminderInvoice, fetchCustomerInInvoice, fetchDebts, fetchInvoiceDetailsByID, fetchInvoiceDetailsByIDNew, fetchInvoices, fetchItemsForInvoice, fetchQuotationByID, fetchQuotationInInvoice, fetchRCTI, fetchRCTIDetailsByID, fetchSupplierForRCTI, submitInvoicePaymentDetails, updateInvoice, updateRCTI, uploadInvoiceDocument } from '../controllers/invoiceController.js';
 
 const router = express.Router()
 
@@ -132,6 +132,6 @@ router.post("/fetchSupplierForRCTI", fetchSupplierForRCTI);
 router.post("/addRCTI", addRCTI);
 router.post("/fetchRCTI", fetchRCTI);
 router.post("/fetchRCTIDetailsByID", fetchRCTIDetailsByID);
-
+router.post("/updateRCTI", updateRCTI);
 
 export default router
