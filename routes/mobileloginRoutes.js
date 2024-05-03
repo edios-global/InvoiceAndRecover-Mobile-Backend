@@ -10,13 +10,15 @@ import { fetchRoles } from '../controllers/rolesController.js';
 import { addCategory, deleteCategory, fetchCategoryById, fetchCategory, updateCategory, fetchCategoryName } from '../controllers/itemCategoriesController.js';
 import { addContact, deleteContact, fetchContactDetailsById, fetchContactName, fetchContacts, updateContact } from '../controllers/contactController.js';
 import { addItem, deleteItem, fetchItems, updateItem } from '../controllers/itemsController.js';
-import { addAndUpdateDefaultSettings, addorUpdateDefaultSettings, deleteBusinessUserSignature, fetchDefaultSettingCurrency, fetchDefaultSettings, updateBusinessUserSignature, updateDefaultSettings, uploadBusinessUserlogo, uploadBusinessUserSignature, viewUploadedBusinessUserSignature } from '../controllers/defaultsettingsController.js';
+import { addorUpdateDefaultSettings, deleteBusinessUserSignature, fetchDefaultSettingCurrency, fetchDefaultSettings, updateBusinessUserSignature, updateDefaultSettings, uploadBusinessUserlogo, uploadBusinessUserSignature, viewUploadedBusinessUserSignature } from '../controllers/defaultsettingsController.js';
 import { addExpense, deleteExpense, fetchExpenses, fetchSupplierInExpense, updateExpense } from '../controllers/expenseController.js';
 import { fetchInvoiceReminderTemplates, updateInvoiceReminderTemplate } from '../controllers/templatesController.js';
 import { addQuotation, deleteQuotationDocument, fetchContactsInQuotation, fetchQuotation, fetchQuotationDetailsByID, updateQuotation, uploadQuotationDocument } from '../controllers/quotationController.js';
 import { fetchParameterListForGST } from '../controllers/parameterController.js';
 import { fetchInvoiceReminderLogs } from '../controllers/invoiceReminderLogController.js';
 import { addInvoice, addRCTI, deleteInvoiceDocument, emailReminderInvoice, fetchCustomerInInvoice, fetchDebts, fetchInvoiceDetailsByID, fetchInvoiceDetailsByIDNew, fetchInvoices, fetchItemsForInvoice, fetchQuotationByID, fetchQuotationInInvoice, fetchRCTI, fetchRCTIDetailsByID, fetchSupplierForRCTI, submitInvoicePaymentDetails, updateInvoice, updateRCTI, uploadInvoiceDocument } from '../controllers/invoiceController.js';
+import { fetchBusinessUserDashboardCardData } from '../controllers/businessUserDashboardController.js'
+
 
 const router = express.Router()
 
@@ -133,5 +135,8 @@ router.post("/addRCTI", addRCTI);
 router.post("/fetchRCTI", fetchRCTI);
 router.post("/fetchRCTIDetailsByID", fetchRCTIDetailsByID);
 router.post("/updateRCTI", updateRCTI);
+
+//===> BusinessUserDashboardCardData =========>
+router.post("/fetchBusinessUserDashboardCardData", fetchBusinessUserDashboardCardData);
 
 export default router

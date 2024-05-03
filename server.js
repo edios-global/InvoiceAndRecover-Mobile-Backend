@@ -153,7 +153,7 @@ app.use(notFound)
 app.use(errorHandler)
 
 const PORT = process.env.PORT || 5000
-const HOSTNAME = process.env.HOSTNAME || localhost
+// const HOSTNAME = process.env.HOSTNAME || localhost
 
 // Please enable for production environment
 // var https = require('https');
