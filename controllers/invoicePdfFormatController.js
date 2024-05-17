@@ -13,15 +13,27 @@ const addInvoicePdfFormat = asyncHandler(async (req, res) => {
 
         let fetch = await InvoicePdfFormat.findOne(query);
         console.log("fetch", fetch);
-        if (fetch) {
+        if (fetch !== null) {
             post.recordType = "U";
             post.lastModifiedDate = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
-            await InvoicePdfFormat.updateOne(query, { $set: post });
+            const pdfFormat = await InvoicePdfFormat.updateOne(query, { $set: post });
+            console.log("pdfFormat", pdfFormat);
 
-            let successResponse = genericResponse(true, "Invoice PDF update successfully.", []);
-            res.status(200).json(successResponse);
+            if (pdfFormat.n === 1) {
+                let successResponse = genericResponse(true, "Invoice PDF update successfully.", []);
+                res.status(200).json(successResponse);
+                return
+            } else {
+                let errorRespnse = genericResponse(false, "Something went wrong, Try again!", []);
+                return res.status(200).json(errorRespnse);
+            }
+
         } else {
-            const pdfFormat = await InvoicePdfFormat.create(post);
+            console.log("post", post);
+            post.createdDate = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
+            post.recordType = "I";
+            // const pdfFormat = await InvoicePdfFormat.create(post);
+            const pdfFormat = await new InvoicePdfFormat(post).save();
             console.log("pdfFormat", pdfFormat);
             if (pdfFormat._id) {
                 let successResponse = genericResponse(true, "Invoice PDF added Successfully!", pdfFormat);

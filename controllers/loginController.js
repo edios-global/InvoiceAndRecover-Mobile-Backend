@@ -18,6 +18,9 @@ import parameterSettings from '../models/ParameterSettingModel.js';
 import { createRequire } from 'module';
 import jwt from "jsonwebtoken";
 import { log } from 'console';
+import DefaultSetting from '../models/defaultSettingsModel.js';
+import country from '../models/countryModel.js';
+import CurrencyList from '../routes/genericCurrencyList.js';
 const require = createRequire(import.meta.url);
 require('dotenv').config();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
@@ -77,7 +80,7 @@ const addCustomerForMobileApi = asyncHandler(async (req, res) => {
       console.log("generateOtp error:", error);
       return;
     });
-    console.log("emailOTP ,emailOTPForTemp", post.emailOTP, emailOTPForTemp);
+    console.log("emailOTP ", post.emailOTP);
 
     await encryptPassword(post.emailOTP).then(data => {
       post.emailOTP = data;
@@ -94,7 +97,7 @@ const addCustomerForMobileApi = asyncHandler(async (req, res) => {
       console.log("Password encryption error:", error);
       return;
     });
-    console.log("mobileOTP ,mobileOTPForTemp", post.mobileOTP, mobileOTPForTemp);
+    console.log("mobileOTP ", post.mobileOTP);
 
     await encryptPassword(post.mobileOTP).then(data => {
       post.mobileOTP = data;
@@ -128,6 +131,7 @@ const addCustomerForMobileApi = asyncHandler(async (req, res) => {
     let emailSubject = '';
     let emailBody = '';
     let smsTemplate = ''
+
     if (fetchedTemplates.length > 0) {
       fetchedTemplates.forEach((val) => {
         if (val.templateName === 'SignupOTPEmailNotification') {
@@ -471,7 +475,7 @@ const validateOTPForMobileApi = asyncHandler(async (req, res) => {
 const wizardSignupForMobileApi = asyncHandler(async (req, res) => {
   try {
     const post = req.body;
-
+    const currentDate = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
     console.log("wizardSignupForMobileApi post: ", post);
     if (!post)
       return res.status(200).json(genericResponse(false, "Request Payload Data is null", []));
@@ -482,6 +486,9 @@ const wizardSignupForMobileApi = asyncHandler(async (req, res) => {
     post.wizardStatusFlag = 1; //set 1 if Wizard Fields update in Business User.
     const fetchUsers = await Users.findOne({ _id: mongoose.Types.ObjectId(post.userId) });
     console.log("fetchUser for wizardSignupForMobileApi: ", fetchUsers);
+    // Retrieve businessUserID
+    const businessUserID = fetchUsers.businessUserID;
+
 
     if (!fetchUsers) {
       console.log(`user not found with _id that pass through mobile app`);
@@ -489,6 +496,39 @@ const wizardSignupForMobileApi = asyncHandler(async (req, res) => {
     }
 
     await BusinessUsers.updateOne({ _id: mongoose.Types.ObjectId(fetchUsers.businessUserID) }, { $set: post });
+
+    // Fetch country details
+    const Country = await country.findOne({ _id: mongoose.Types.ObjectId(post.companyCountryId) }, { countryName: 1 });
+    if (!Country || !Country.countryName) {
+      return res.status(200).json(genericResponse(false, `Please ensure the Address is correct before Signin.`, []));
+    }
+
+    // Fetch matching currency
+    const matchedCountry = CurrencyList.find((item) => item.CountryName === Country.countryName);
+    console.log("matchedCountry", matchedCountry);
+    if (matchedCountry && businessUserID) {
+      // Create default settings if not exists
+      const defaultSettingparams = {
+        businessUserID,
+        currencyValue: matchedCountry.Code,
+        createdDate: currentDate,
+        rctiTypes: 'Of the Following Month',
+        rctiDues: "30",
+        rctiPrefix: "RCTI",
+        rctiStartNumber: "0001",
+        quotationPrefix: 'QUOT',
+        quotationStartNumber: '0001',
+        quotationTypes: 'Of the Following Month',
+        quotationDues: '30',
+        invoicePrefix: 'INV',
+        invoiceStartNumber: '0001',
+        invoiceTypes: 'Of the Following Month',
+        invoiceDues: '30',
+        creditNotePrefix: 'CRED',
+        creditNoteNumber: '0001'
+      };
+      await DefaultSetting(defaultSettingparams).save();
+    }
 
     let payload = { _id: fetchUsers._id }
     jwt.sign(payload, process.env.JWT_SECRET_TOKEN, { expiresIn: "3h" }, async (err, token) => {
@@ -526,7 +566,7 @@ const wizardSignupForMobileApi = asyncHandler(async (req, res) => {
               companyCity: "$businessUser.companyCity",
               businessName: "$businessUser.businessName",
               companyName: "$businessUser.companyName",
-              abnNumber: "$businessUser.abnNumber",
+              abnNumber: "$businessUser.abnNumber"
             }
           }
         ]);

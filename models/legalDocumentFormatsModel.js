@@ -2,21 +2,20 @@ import mongoose from 'mongoose';
 import paginate from "mongoose-paginate-v2";
 import aggregatePaginate from "mongoose-aggregate-paginate-v2";
 
-const quotationDocumentsSchema = mongoose.Schema(
+const legalDocumentFormatsSchema = mongoose.Schema(
     {
-        quotationID: {
-            type: mongoose.Schema.Types.ObjectId,
-            required: true,
-        },
+
 
         documentName: {
+            type: String,
+            required: true,
+        },
+        documentRemark: {
             type: String,
         },
         documentFileName: {
             type: String,
-        },
-        referenceFolder: {
-            type: String,
+            required: true,
         },
         uploadedDateTime: {
             type: Date,
@@ -35,8 +34,8 @@ const quotationDocumentsSchema = mongoose.Schema(
 
     }
 )
-quotationDocumentsSchema.plugin(paginate);
-quotationDocumentsSchema.plugin(aggregatePaginate);
-const QuotationDocuments = mongoose.model('quotationDocuments', quotationDocumentsSchema)
+legalDocumentFormatsSchema.plugin(paginate);
+legalDocumentFormatsSchema.plugin(aggregatePaginate);
+const LegalDocumentFormats = mongoose.model('legal_document_formats', legalDocumentFormatsSchema)
 
-export default QuotationDocuments;
+export default LegalDocumentFormats;

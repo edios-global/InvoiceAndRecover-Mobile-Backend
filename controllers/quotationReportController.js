@@ -15,6 +15,8 @@ const fetchQuotationReportData = asyncHandler(async (req, res) => {
         let currentDate = new Date(new Date().setUTCHours(0, 0, 0, 0));
         let tomorrowDate = new Date(new Date().setUTCHours(0, 0, 0, 0));
 
+
+
         let activationsearchDate;
 
         if (post.quotationDuration !== "All") {
@@ -22,24 +24,32 @@ const fetchQuotationReportData = asyncHandler(async (req, res) => {
                 tomorrowDate.setDate(tomorrowDate.getDate() + 1);
                 activationsearchDate = { $gte: new Date(currentDate), $lt: new Date(tomorrowDate) }
             }
-            if (post.quotationDuration === "last7Days") {
+            if (post.quotationDuration === "last 7 Days") {
                 tomorrowDate.setDate(tomorrowDate.getDate() - 7);
                 activationsearchDate = { $gte: new Date(tomorrowDate), $lt: new Date(currentDate.setDate(currentDate.getDate() + 1)) }
             }
-            if (post.quotationDuration === "last30Days") {
+            if (post.quotationDuration === "last 30 Days") {
                 tomorrowDate.setDate(tomorrowDate.getDate() - 30);
                 activationsearchDate = { $gte: new Date(tomorrowDate), $lt: new Date(currentDate.setDate(currentDate.getDate() + 1)) }
             }
-            if (post.quotationDuration === "last1Year") {
+            if (post.quotationDuration === "12 months") {
                 tomorrowDate.setFullYear(tomorrowDate.getFullYear() - 1);
                 activationsearchDate = { $gte: new Date(tomorrowDate), $lt: new Date(currentDate.setDate(currentDate.getDate() + 1)) }
+            }
+            if (post.quotationDuration === "custom date") {
+                let fromDate = new Date(post.fromDate);
+                let toDate = new Date(post.toDate);
+                fromDate.setUTCHours(0, 0, 0, 0);
+                toDate.setUTCHours(0, 0, 0, 0) + 1;
+                toDate.setDate(toDate.getDate() + 1);
+                console.log("qwert", fromDate, toDate)
+                activationsearchDate = { $gte: fromDate, $lt: toDate }
             }
         }
 
         if (post.quotationDuration !== "" && post.quotationDuration !== undefined) {
             query.quotationDate = activationsearchDate
         }
-
 
         let fetchData = await Quotations.aggregate(
             [
@@ -52,7 +62,7 @@ const fetchQuotationReportData = asyncHandler(async (req, res) => {
                         as: 'quotationitems'
                     }
                 },
-                { $unwind: '$quotationitems' },
+                { $unwind: { path: "$quotationitems", preserveNullAndEmptyArrays: true } },
                 {
                     $lookup: {
                         from: 'items',
@@ -61,7 +71,7 @@ const fetchQuotationReportData = asyncHandler(async (req, res) => {
                         as: 'items'
                     }
                 },
-                { $unwind: '$items' },
+                { $unwind: { path: "$items", preserveNullAndEmptyArrays: true } },
                 {
                     $lookup: {
                         from: 'contacts',
@@ -70,7 +80,7 @@ const fetchQuotationReportData = asyncHandler(async (req, res) => {
                         as: 'contacts'
                     }
                 },
-                { $unwind: '$contacts' },
+                { $unwind: { path: "$contacts", preserveNullAndEmptyArrays: true } },
                 {
                     $project: {
                         _id: 1,
@@ -95,6 +105,12 @@ const fetchQuotationReportData = asyncHandler(async (req, res) => {
                         discountAmount: "$quotationitems.discountAmount",
                         gst: "$quotationitems.gst",
                         validUptoDate: {
+                            $dateToString: {
+                                format: "%Y-%m-%d", // Specify the desired format here
+                                date: "$validUptoDate"
+                            }
+                        },
+                        validUptoDate1: {
                             $concat: [
                                 {
                                     $let: {
@@ -110,6 +126,7 @@ const fetchQuotationReportData = asyncHandler(async (req, res) => {
                                 { $dateToString: { format: "%Y", date: "$validUptoDate" } },
                             ]
                         },
+
                         quotationDateString: {
                             $concat: [
                                 {
@@ -126,15 +143,17 @@ const fetchQuotationReportData = asyncHandler(async (req, res) => {
                                 { $dateToString: { format: "%Y", date: "$quotationDate" } },
                             ]
                         },
-
-
                     }
                 },
             ]
         );
-
+        console.log("fetchData Count", fetchData, fetchData.length)
         if (fetchData.length > 0) {
-            let successResponse = genericResponse(true, "fetchQuotationReportData fetched successfully.", fetchData);
+            let successResponse = genericResponse(true, "fetch Quotation Report Data fetched successfully.", fetchData);
+            res.status(200).json(successResponse);
+            return;
+        } else {
+            let successResponse = genericResponse(true, "No Quotation Report Data found.", []);
             res.status(200).json(successResponse);
         }
     } catch (error) {

@@ -5,12 +5,13 @@ import mongoose from 'mongoose';
 import { createRequire } from 'module';
 import Contacts from '../models/contactModel.js';
 import ContactOtherEmails from '../models/contactOtherEmailsModel.js';
-import { generateSearchParameterList, getNextSequenceValue, uploadImageFile, uploadQuotationFile } from '../routes/genericMethods.js';
+import { generateSearchParameterList, getNextSequenceValue, sendMailBySendGrid, uploadImageFile, uploadQuotationFile, validateEmail } from '../routes/genericMethods.js';
 import DefaultSetting from '../models/defaultSettingsModel.js';
 import items from '../models/itemsModel.js';
 import Quotations from '../models/quotationModel.js';
 import QuotationItems from '../models/quotationItemsModel.js';
 import QuotationDocuments from '../models/quotationdocumentsModel.js';
+import Templates from '../models/templatesModel.js';
 const require = createRequire(import.meta.url);
 require('dotenv').config();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
@@ -189,7 +190,7 @@ const fetchQuotation = asyncHandler(async (req, res) => {
       },
 
     ])
-    console.log('fetchUser(post)', fetchUser)
+    // console.log('fetchUser(post)', fetchUser)
     let successResponse = genericResponse(true, "Quotations fetched successfully.", fetchUser);
     res.status(200).json(successResponse);
   } catch (error) {
@@ -226,54 +227,161 @@ const fetchContactsInQuotation = asyncHandler(async (req, res) => {
 const addQuotation = asyncHandler(async (req, res) => {
   const post = req.body;
   console.log('addQuotation (post)', post)
-
+  console.log('files (post)', req.files)
   if (post.signatureKey !== process.env.SIGNATURE_KEY) {
     return res.status(200).json(genericResponse(false, 'Invalid Signature Key!', []));
   }
   try {
-    //  insert a new Quotation   
-    const fetchQuotation = await DefaultSetting.findOne({ businessUserID: mongoose.Types.ObjectId(post.businessUserID) }, { quotationPrefix: 1, quotationStartNumber: 1, });
+
+    //  insert a new Quotation 
+    const fetchQuotation = await DefaultSetting.findOne({ businessUserID: mongoose.Types.ObjectId(post.businessUserID) }, { quotationPrefix: 1, quotationStartNumber: 1, currencyValue: 1 });
     if (fetchQuotation && fetchQuotation.quotationPrefix && fetchQuotation.quotationStartNumber) {
       const QuotationStartNumber = await getNextSequenceValue("quotationNumber", post.businessUserID, fetchQuotation.quotationStartNumber);
       console.log("new Q Number: ", fetchQuotation.quotationPrefix + QuotationStartNumber);
-
-
       post.quotationNumber = fetchQuotation.quotationPrefix + QuotationStartNumber;
-
       post.createdDate = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
       post.recordType = "I";
       post.quotationStatus = "Pending";
-
+      post.currencyValue = fetchQuotation.currencyValue;
       const addedQuotation = await new Quotations(post).save();
+
       if (addedQuotation._id !== null) {
         console.log("addedQuotation._id ", addedQuotation._id);
-        for (let ID of post.itemID) {
-          let fetchItems = await items.findOne({ _id: mongoose.Types.ObjectId(ID) });
-          delete fetchItems._id
-          if (fetchItems) {
-            const modifiedItems = {
-              ...fetchItems.toObject(), // Convert fetchItems to a plain JavaScript object
-              createdDate: new Date(new Date() - (new Date().getTimezoneOffset() * 60000)),
-              recordType: "I",
-              itemID: fetchItems._id,
-              quotationID: addedQuotation._id
-            };
-
-            console.log("modifiedItems ", modifiedItems);
-            const inserted = await QuotationItems(modifiedItems).save();
-
-
+        let QID = addedQuotation._id;
+        if (post.itemID) {
+          const itemIDs = JSON.parse(post.itemID);
+          for (let ID of itemIDs) {
+            let fetchItems = await items.findOne({ _id: mongoose.Types.ObjectId(ID) });
+            delete fetchItems._id
+            if (fetchItems) {
+              const modifiedItems = {
+                ...fetchItems.toObject(), // Convert fetchItems to a plain JavaScript object
+                createdDate: new Date(new Date() - (new Date().getTimezoneOffset() * 60000)),
+                recordType: "I",
+                itemID: fetchItems._id,
+                quotationID: addedQuotation._id
+              };
+              delete modifiedItems._id
+              delete modifiedItems.lastModifiedDate
+              console.log("modifiedItems ", modifiedItems);
+              const inserted = await QuotationItems(modifiedItems).save();
+            }
           }
         }
 
-        // if () {
-        //   const returnedFileName = await uploadQuotationFile(req, post.documentName, "quotationDocuments");
-        //   post.documentFileName = returnedFileName;
-        //   post.quotationID = addedQuotation._id;
-        //   post.uploadedDateTime = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
-        //   post.createdDate = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
-        //   const insertedDoc = await QuotationDocuments(post).save();
+        if (req.files !== null) {
+          const DocumentName = JSON.parse(post.DocumentName);
+          console.log("DocumentName", DocumentName);
+          const returnedFileName = await uploadQuotationFile(req, DocumentName, "quotationDocuments", QID);
+          post.documentFileName = returnedFileName;
+          console.log("documentFileName", post.documentFileName);
+          post.quotationID = addedQuotation._id;
+          post.documentName = DocumentName;
+          post.referenceFolder = "quotationDocuments/" + post.quotationID.toString();
+          post.uploadedDateTime = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
+          post.createdDate = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
+          const insertedDoc = await QuotationDocuments(post).save();
+        }
+
+        // let SendEmailFlag = false;
+        // if (post.sendEmailFlag) {
+        //   SendEmailFlag = true;
+        //   post.hasQuo_DocumentFile = true; // if user click save&SendEmail, true this checked important change
         // }
+
+        // if (post.sendEmailFlag = true) {
+        //   const fetchQuotation = await Quotations.aggregate([
+        //     { $match: { _id: mongoose.Types.ObjectId(QID) } },
+        //     {
+        //       $lookup: {
+        //         from: 'contacts',
+        //         localField: "contactID",
+        //         foreignField: "_id",
+        //         as: "contact"
+        //       }
+        //     },
+        //     { $unwind: '$contact' },
+        //     {
+        //       $project: {
+        //         _id: 1,
+        //         quotationNumber: 1,
+        //         quotationStatus: 1,
+        //         customerName: "$contact.name",
+        //         customerEmail: "$contact.emailAddress",
+        //         otherEmailAddress: "$contact.otherEmailAddress",
+        //         quotationDate: {
+        //           $concat: [
+        //             {
+        //               $let: {
+        //                 vars: {
+        //                   monthsInString: [, 'Jan ', 'Feb ', 'Mar ', 'Apr ', 'May ', 'Jun ', 'Jul ', 'Aug ', 'Sep ', 'Oct ', 'Nov ', 'Dec ']
+        //                 },
+        //                 in: {
+        //                   $arrayElemAt: ['$$monthsInString', { $month: "$quotationDate" }]
+        //                 }
+        //               }
+        //             },
+        //             { $dateToString: { format: "%d", date: "$quotationDate" } }, ", ",
+        //             { $dateToString: { format: "%Y", date: "$quotationDate" } },
+        //           ]
+        //         },
+        //         validUptoDate: {
+        //           $concat: [
+        //             {
+        //               $let: {
+        //                 vars: {
+        //                   monthsInString: [, 'Jan ', 'Feb ', 'Mar ', 'Apr ', 'May ', 'Jun ', 'Jul ', 'Aug ', 'Sep ', 'Oct ', 'Nov ', 'Dec ']
+        //                 },
+        //                 in: {
+        //                   $arrayElemAt: ['$$monthsInString', { $month: "$validUptoDate" }]
+        //                 }
+        //               }
+        //             },
+        //             { $dateToString: { format: "%d", date: "$validUptoDate" } }, ", ",
+        //             { $dateToString: { format: "%Y", date: "$validUptoDate" } },
+        //           ]
+        //         },
+        //       }
+        //     },
+
+        //   ]);
+        //   if (fetchQuotation && fetchQuotation.length > 0 && (fetchQuotation[0].quotationStatus === 'Pending')) {
+        //     let CustomerEmail = [];
+        //     CustomerEmail.push(fetchQuotation[0].customerEmail);
+        //     if (fetchQuotation[0].otherEmailAddress && fetchQuotation[0].otherEmailAddress.length > 0) {
+        //       fetchQuotation[0].otherEmailAddress.forEach(email => {
+        //         if (validateEmail(email)) {
+        //           CustomerEmail.push(email);
+        //         }
+        //       });
+        //     }
+        //     let emailSubject = '';
+        //     let emailBody = '';
+        //     const templateQuery = { templateStatus: 'Active', templateName: 'QuotationLinkToCustomer' };
+        //     const fetchedTemplates = await Templates.find(templateQuery);
+        //     if (fetchedTemplates.length > 0) {
+        //       let LINK = process.env.URLPROD + "/" + "quotation/" + fetchQuotation[0].quotationNumber + "/" + fetchQuotation[0]._id;
+        //       let val = fetchedTemplates[0];
+
+        //       val.templateSubject = val.templateSubject.replaceAll('[QuotationNumber]', fetchQuotation[0].quotationNumber);
+        //       val.templateSubject = val.templateSubject.replaceAll('[CustomerName]', fetchQuotation[0].customerName);
+        //       emailSubject = val.templateSubject;
+
+        //       val.templateMessage = val.templateMessage.replaceAll('[CustomerName]', fetchQuotation[0].customerName);
+        //       val.templateMessage = val.templateMessage.replaceAll('[QuotationNumber]', fetchQuotation[0].quotationNumber);
+        //       val.templateMessage = val.templateMessage.replaceAll('[QuotationStatus]', fetchQuotation[0].quotationStatus);
+        //       val.templateMessage = val.templateMessage.replaceAll('[QuotationDate]', fetchQuotation[0].quotationDate);
+        //       val.templateMessage = val.templateMessage.replaceAll('[ValidUptoDate]', fetchQuotation[0].validUptoDate);
+        //       val.templateMessage = val.templateMessage.replaceAll('[link]', LINK);
+        //       emailBody = val.templateMessage;
+        //       await sendMailBySendGrid(CustomerEmail, emailSubject, emailBody);
+        //       return res.status(200).json(genericResponse(true, "Quotation Details Saved Successfully and Email sent to the Customer's Email Address.", { _id: post.quotationID, hasQuo_DocumentFile: true }));
+        //     } else {
+        //       return res.status(200).json(genericResponse(false, "Quotation Details Saved Successfully but Email not sent. Please configure the Email's templates.", { _id: post.quotationID, hasQuo_DocumentFile: true }));
+        //     }
+        //   }
+        // }
+
 
         console.log("addedQuotation ", addedQuotation);
         let successResponse = genericResponse(true, "Q Added successfully.", addedQuotation);
@@ -308,6 +416,14 @@ const fetchQuotationDetailsByID = asyncHandler(async (req, res) => {
           as: "items",
         }
       },
+      // {
+      //   $lookup: {
+      //     from: "items",
+      //     localField: "quotationitems.itemID",
+      //     foreignField: "_id",
+      //     as: "itemsNew",
+      //   }
+      // },
       {
         $lookup: {
           from: "quotationdocuments",
@@ -317,9 +433,31 @@ const fetchQuotationDetailsByID = asyncHandler(async (req, res) => {
         }
       },
       {
+        $lookup: {
+          from: "contacts",
+          localField: "contactID",
+          foreignField: "_id",
+          as: "contacts",
+        }
+      },
+      {
         $project: {
-          items: 1, //Array of Items
+          items: {
+            $map: {
+              "input": "$items",
+              as: "item",
+              in: {
+                "_id": "$$item.itemID",
+                "itemQuantity": "$$item.itemQuantity",
+                "itemPrice": "$$item.itemPrice",
+                "discountValue": "$$item.discountValue",
+                "discountType": "$$item.discountType",
+              }
+            }
+          },//Array of Items
+          // itemsNew: 1, //Array of Items
           quotationDocuments: 1, //Array of Quotation Doc.
+          contacts: 1, //Array of Quotation Doc.
           quotationNumber: 1,
           contactID: 1,
           validUpto: 1,
@@ -331,7 +469,8 @@ const fetchQuotationDetailsByID = asyncHandler(async (req, res) => {
           totalAmount: 1,
           totalDiscountAmount: 1,
           finalAmount: 1,
-          paymentInstruction: 1,
+          paymentInstructions: 1,
+          description: 1
         }
       }
     ])
@@ -356,62 +495,184 @@ const updateQuotation = asyncHandler(async (req, res) => {
     let post = req.body;
     delete post._id;
     console.log("updateQuotation post: ", post);
-    return
+
     if (!post.quotationID) {
-      return res.status(200).json(genericResponse(false, "Quotation ID is missing.", []));
+      return res.status(204).json(genericResponse(false, "Quotation ID is missing.", []));
     }
-    let ItemsList = [];
 
-    for (const element of post.itemsList) {
-      delete element._id;
-      element.itemPrice = parseFloat(element.itemPrice).toFixed(2);
-      element.itemQuantity = parseFloat(element.itemQuantity).toFixed(2);
-      element.gst = parseFloat(element.gst).toFixed(2);
-      element.priceValidityValue = parseFloat(element.priceValidityValue).toFixed(2);
-      element.discountValue = parseFloat(element.discountValue).toFixed(2);
-      element.discountAmount = parseFloat(element.discountAmount).toFixed(2);
-
-      const itemsUpdated = await items.updateOne(
-        { _id: mongoose.Types.ObjectId(element.itemID) },
-        { $set: element }
-      );
-      console.log("itemsUpdated: ", itemsUpdated);
-
-      element.createdDate = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
-      element.recordType = "I";
-      element.quotationID = post.quotationID;
-
-      ItemsList.push(element);
-      console.log("ItemsList: ", ItemsList);
-    }
-    if (ItemsList.length > 0) {
+    if (post.itemID) {
+      console.log("post.itemID ", post.itemID);
       const removePreviousItems = await QuotationItems.deleteMany({ quotationID: mongoose.Types.ObjectId(post.quotationID) });
-      console.log("removePrevious Items", removePreviousItems);
+      const itemIDs = JSON.parse(post.itemID);
+      console.log("itemIDs ", itemIDs);
+      for (let ID of itemIDs) {
+        let fetchItems = await items.findOne({ _id: mongoose.Types.ObjectId(ID) });
+        console.log("fetchItems ", fetchItems);
 
-      let insertItems = await QuotationItems.insertMany(ItemsList);
-      console.log("insertItems: ", insertItems);
-      if (insertItems && insertItems.length > 0) {
-        post.totalAmount = parseFloat(post.totalAmount).toFixed(2);
-        post.totalDiscountAmount = parseFloat(post.totalDiscountAmount).toFixed(2);
-        post.finalAmount = parseFloat(post.finalAmount).toFixed(2);
-        post.recordType = "U";
-        post.lastModifiedDate = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
+        if (fetchItems) {
+          const modifiedItems = {
+            ...fetchItems.toObject(), // Convert fetchItems to a plain JavaScript object
+            createdDate: new Date(new Date() - (new Date().getTimezoneOffset() * 60000)),
+            recordType: "I",
+            itemID: fetchItems._id,
+            quotationID: post.quotationID
+          };
+          delete modifiedItems._id
+          delete modifiedItems.lastModifiedDate
 
-        const updatedQuotation = await Quotations.updateOne(
-          { _id: mongoose.Types.ObjectId(post.quotationID) }, { $set: post }
-        )
-        if (updatedQuotation.ok === 1) {
-          return res.status(200).json(genericResponse(true, "Quotation updated Successfully.", { _id: post.quotationID }));
-        } else {
-          return res.status(200).json(genericResponse(false, "Quotation not updated.", []));
+          const inserted = await QuotationItems(modifiedItems).save();
         }
-      } else {
-        console.error("Items not inserted or encountered an error.");
-        return res.status(200).json(genericResponse(false, "Items not inserted or encountered an error.", []));
       }
 
+      post.totalAmount = parseFloat(post.totalAmount).toFixed(2);
+      if (post.totalDiscountAmount) {
+        post.totalDiscountAmount = parseFloat(post.totalDiscountAmount).toFixed(2);
+      }
+
+      post.finalAmount = parseFloat(post.finalAmount).toFixed(2);
+      post.recordType = "U";
+      post.lastModifiedDate = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
+
+      const updatedQuotation = await Quotations.updateOne(
+        { _id: mongoose.Types.ObjectId(post.quotationID) }, { $set: post }
+      )
+      let QID = post.quotationID
+      console.log("req.files ", req.files);
+      if (req.files !== null) {
+
+        const isDocumentExist = await QuotationDocuments.findOne({ quotationID: mongoose.Types.ObjectId(post.quotationID), documentName: post.documentName });
+        if (isDocumentExist) {
+          console.log("url", process.env.LOCATION_PATH + `${isDocumentExist.documentFileName}`);
+          var fs = require("fs");
+          fs.unlink(
+            process.env.LOCATION_PATH + `/${isDocumentExist.documentFileName}`,
+            function (err) {
+              if (err) {
+                throw err;
+              }
+            }
+          );
+
+          const returnedFileName = await uploadQuotationFile(req, post.documentName, "quotationDocuments", QID);
+          post.documentFileName = returnedFileName;
+          post.uploadedDateTime = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
+          post.recordType = "U";
+          const existingDoc = await QuotationDocuments.findOneAndUpdate(
+            { quotationID: mongoose.Types.ObjectId(post.quotationID), documentName: post.documentName },
+            { $set: post },
+            { new: true, useFindAndModify: false }
+          );
+        }
+      }
+
+      // let SendEmailFlag = false;
+      // if (post.sendEmailFlag) {
+      //   SendEmailFlag = true;
+      //   post.hasQuo_DocumentFile = true; // if user click save&SendEmail, true this checked important change
+      // }
+
+      // if (post.sendEmailFlag = true) {
+      //   const fetchQuotation = await Quotations.aggregate([
+      //     { $match: { _id: mongoose.Types.ObjectId(QID) } },
+      //     {
+      //       $lookup: {
+      //         from: 'contacts',
+      //         localField: "contactID",
+      //         foreignField: "_id",
+      //         as: "contact"
+      //       }
+      //     },
+      //     { $unwind: '$contact' },
+      //     {
+      //       $project: {
+      //         _id: 1,
+      //         quotationNumber: 1,
+      //         quotationStatus: 1,
+      //         customerName: "$contact.name",
+      //         customerEmail: "$contact.emailAddress",
+      //         otherEmailAddress: "$contact.otherEmailAddress",
+      //         quotationDate: {
+      //           $concat: [
+      //             {
+      //               $let: {
+      //                 vars: {
+      //                   monthsInString: [, 'Jan ', 'Feb ', 'Mar ', 'Apr ', 'May ', 'Jun ', 'Jul ', 'Aug ', 'Sep ', 'Oct ', 'Nov ', 'Dec ']
+      //                 },
+      //                 in: {
+      //                   $arrayElemAt: ['$$monthsInString', { $month: "$quotationDate" }]
+      //                 }
+      //               }
+      //             },
+      //             { $dateToString: { format: "%d", date: "$quotationDate" } }, ", ",
+      //             { $dateToString: { format: "%Y", date: "$quotationDate" } },
+      //           ]
+      //         },
+      //         validUptoDate: {
+      //           $concat: [
+      //             {
+      //               $let: {
+      //                 vars: {
+      //                   monthsInString: [, 'Jan ', 'Feb ', 'Mar ', 'Apr ', 'May ', 'Jun ', 'Jul ', 'Aug ', 'Sep ', 'Oct ', 'Nov ', 'Dec ']
+      //                 },
+      //                 in: {
+      //                   $arrayElemAt: ['$$monthsInString', { $month: "$validUptoDate" }]
+      //                 }
+      //               }
+      //             },
+      //             { $dateToString: { format: "%d", date: "$validUptoDate" } }, ", ",
+      //             { $dateToString: { format: "%Y", date: "$validUptoDate" } },
+      //           ]
+      //         },
+      //       }
+      //     },
+
+      //   ]);
+      //   if (fetchQuotation && fetchQuotation.length > 0 && (fetchQuotation[0].quotationStatus === 'Pending')) {
+      //     let CustomerEmail = [];
+      //     CustomerEmail.push(fetchQuotation[0].customerEmail);
+      //     if (fetchQuotation[0].otherEmailAddress && fetchQuotation[0].otherEmailAddress.length > 0) {
+      //       fetchQuotation[0].otherEmailAddress.forEach(email => {
+      //         if (validateEmail(email)) {
+      //           CustomerEmail.push(email);
+      //         }
+      //       });
+      //     }
+      //     let emailSubject = '';
+      //     let emailBody = '';
+      //     const templateQuery = { templateStatus: 'Active', templateName: 'QuotationLinkToCustomer' };
+      //     const fetchedTemplates = await Templates.find(templateQuery);
+      //     if (fetchedTemplates.length > 0) {
+      //       let LINK = process.env.URLPROD + "/" + "quotation/" + fetchQuotation[0].quotationNumber + "/" + fetchQuotation[0]._id;
+      //       let val = fetchedTemplates[0];
+
+      //       val.templateSubject = val.templateSubject.replaceAll('[QuotationNumber]', fetchQuotation[0].quotationNumber);
+      //       val.templateSubject = val.templateSubject.replaceAll('[CustomerName]', fetchQuotation[0].customerName);
+      //       emailSubject = val.templateSubject;
+
+      //       val.templateMessage = val.templateMessage.replaceAll('[CustomerName]', fetchQuotation[0].customerName);
+      //       val.templateMessage = val.templateMessage.replaceAll('[QuotationNumber]', fetchQuotation[0].quotationNumber);
+      //       val.templateMessage = val.templateMessage.replaceAll('[QuotationStatus]', fetchQuotation[0].quotationStatus);
+      //       val.templateMessage = val.templateMessage.replaceAll('[QuotationDate]', fetchQuotation[0].quotationDate);
+      //       val.templateMessage = val.templateMessage.replaceAll('[ValidUptoDate]', fetchQuotation[0].validUptoDate);
+      //       val.templateMessage = val.templateMessage.replaceAll('[link]', LINK);
+      //       emailBody = val.templateMessage;
+      //       await sendMailBySendGrid(CustomerEmail, emailSubject, emailBody);
+      //       return res.status(200).json(genericResponse(true, "Quotation Details Saved Successfully and Email sent to the Customer's Email Address.", { _id: post.quotationID, hasQuo_DocumentFile: true }));
+      //     } else {
+      //       return res.status(200).json(genericResponse(false, "Quotation Details Saved Successfully but Email not sent. Please configure the Email's templates.", { _id: post.quotationID, hasQuo_DocumentFile: true }));
+      //     }
+      //   }
+      // }
+
+      if (updatedQuotation.ok === 1) {
+        return res.status(200).json(genericResponse(true, "Quotation updated Successfully.", { _id: post.quotationID }));
+      } else {
+        return res.status(204).json(genericResponse(false, "Quotation not updated.", []));
+      }
+
+
     } else {
-      return res.status(200).json(genericResponse(false, "Items are missing without items quotation can't be updated.", []));
+      return res.status(204).json(genericResponse(false, "Items are missing without items quotation can't be updated.", []));
     }
 
   } catch (error) {
@@ -502,6 +763,144 @@ const deleteQuotationDocument = asyncHandler(async (req, res) => {
   }
 });
 
+const emailReminderQuotation = asyncHandler(async (req, res) => {
+  try {
+    let post = req.body;
+    console.log("post:emailReminderQuotation ", post);
+
+    if (!post.quotationID) {
+      return res.status(200).json(genericResponse(false, "quotation ID is missing.", []));
+    }
+
+    const fetchQuotation = await Quotations.aggregate([
+      { $match: { _id: mongoose.Types.ObjectId(post.quotationID) } },
+      {
+        $lookup: {
+          from: 'contacts',
+          localField: "contactID",
+          foreignField: "_id",
+          as: "contact"
+        }
+      },
+      { $unwind: '$contact' },
+      {
+        $project: {
+          _id: 1,
+          quotationNumber: 1,
+          quotationStatus: 1,
+          customerName: "$contact.name",
+          customerEmail: "$contact.emailAddress",
+          otherEmailAddress: "$contact.otherEmailAddress",
+          quotationDate: {
+            $concat: [
+              {
+                $let: {
+                  vars: {
+                    monthsInString: [, 'Jan ', 'Feb ', 'Mar ', 'Apr ', 'May ', 'Jun ', 'Jul ', 'Aug ', 'Sep ', 'Oct ', 'Nov ', 'Dec ']
+                  },
+                  in: {
+                    $arrayElemAt: ['$$monthsInString', { $month: "$quotationDate" }]
+                  }
+                }
+              },
+              { $dateToString: { format: "%d", date: "$quotationDate" } }, ", ",
+              { $dateToString: { format: "%Y", date: "$quotationDate" } },
+            ]
+          },
+          validUptoDate: {
+            $concat: [
+              {
+                $let: {
+                  vars: {
+                    monthsInString: [, 'Jan ', 'Feb ', 'Mar ', 'Apr ', 'May ', 'Jun ', 'Jul ', 'Aug ', 'Sep ', 'Oct ', 'Nov ', 'Dec ']
+                  },
+                  in: {
+                    $arrayElemAt: ['$$monthsInString', { $month: "$validUptoDate" }]
+                  }
+                }
+              },
+              { $dateToString: { format: "%d", date: "$validUptoDate" } }, ", ",
+              { $dateToString: { format: "%Y", date: "$validUptoDate" } },
+            ]
+          },
+        }
+      },
+
+    ]);
+    console.log("fetchQuotation ", fetchQuotation);
+
+    if (fetchQuotation.length > 0 && (fetchQuotation[0].quotationStatus === 'Pending')) {
+      let CustomerEmail = [];
+      CustomerEmail.push(fetchQuotation[0].customerEmail);
+      if (fetchQuotation[0].otherEmailAddress && fetchQuotation[0].otherEmailAddress.length > 0) {
+        fetchQuotation[0].otherEmailAddress.forEach(email => {
+          if (validateEmail(email)) {
+            CustomerEmail.push(email);
+          }
+        });
+      }
+      let emailSubject = '';
+      let emailBody = '';
+      const templateQuery = { templateStatus: 'Active', templateName: 'QuotationLinkToCustomer' };
+      const fetchedTemplates = await Templates.find(templateQuery);
+      if (fetchedTemplates.length > 0) {
+        let LINK = process.env.URLPROD + "/" + "quotation/" + fetchQuotation[0].quotationNumber + "/" + fetchQuotation[0]._id;
+        let val = fetchedTemplates[0];
+
+        val.templateSubject = val.templateSubject.replaceAll('[QuotationNumber]', fetchQuotation[0].quotationNumber);
+        val.templateSubject = val.templateSubject.replaceAll('[CustomerName]', fetchQuotation[0].customerName);
+        emailSubject = val.templateSubject;
+
+        val.templateMessage = val.templateMessage.replaceAll('[CustomerName]', fetchQuotation[0].customerName);
+        val.templateMessage = val.templateMessage.replaceAll('[QuotationNumber]', fetchQuotation[0].quotationNumber);
+        val.templateMessage = val.templateMessage.replaceAll('[QuotationStatus]', fetchQuotation[0].quotationStatus);
+        val.templateMessage = val.templateMessage.replaceAll('[QuotationDate]', fetchQuotation[0].quotationDate);
+        val.templateMessage = val.templateMessage.replaceAll('[ValidUptoDate]', fetchQuotation[0].validUptoDate);
+        val.templateMessage = val.templateMessage.replaceAll('[link]', LINK);
+        emailBody = val.templateMessage;
+        await sendMailBySendGrid(CustomerEmail, emailSubject, emailBody);
+        return res.status(200).json(genericResponse(true, "Quotation Details Saved Successfully and Email sent to the Customer's Email Address.", { _id: post.quotationID, hasQuo_DocumentFile: true }));
+      } else {
+        return res.status(200).json(genericResponse(false, "Quotation Details Saved Successfully but Email not sent. Please configure the Email's templates.", { _id: post.quotationID, hasQuo_DocumentFile: true }));
+      }
+    }
+
+
+  } catch (error) {
+    console.log("error in emailInvoice =", error.message);
+    return res.status(400).json(genericResponse(false, error.message, []));
+  }
+});
+
+const viewFile = asyncHandler(async (req, res) => {
+  try {
+    let fileName = req.query.fileName;
+    var options = {
+      root: process.env.LOCATION_PATH,
+      dotfiles: 'deny',
+      headers: {
+        'x-timestamp': Date.now(),
+        'x-sent': true
+      },
+      status: genericResponse(true, "File viewed successfully.", [])
+    }
+    res.sendFile(fileName, options, function (error) {
+      try {
+        if (error) {
+          let errorRespnse = genericResponse(false, error.message, []);
+          res.status(200).json(errorRespnse);
+        }
+      } catch (error) {
+        let errorRespnse = genericResponse(false, error.message, []);
+        res.status(200).json(errorRespnse);
+      }
+    })
+  } catch (error) {
+    let errorRespnse = genericResponse(false, error.message, []);
+    res.status(200).json(errorRespnse);
+  }
+});
+
 
 export {
   fetchContactsForQuotation,
@@ -514,6 +913,8 @@ export {
   updateQuotation,
   uploadQuotationDocument,
   deleteQuotationDocument,
-  fetchQuotation
+  fetchQuotation,
+  emailReminderQuotation,
+  viewFile
 
 }

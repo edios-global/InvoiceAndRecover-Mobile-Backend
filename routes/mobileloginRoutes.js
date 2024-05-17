@@ -18,14 +18,15 @@ import {
 import { addExpense, deleteExpense, fetchExpenses, fetchSupplierInExpense, updateExpense } from '../controllers/expenseController.js';
 import { fetchInvoiceReminderTemplates, updateInvoiceReminderTemplate } from '../controllers/templatesController.js';
 import {
-    addQuotation, deleteQuotationDocument, fetchContactsInQuotation, fetchQuotation,
-    fetchQuotationDetailsByID, updateQuotation, uploadQuotationDocument
+    addQuotation, deleteQuotationDocument, emailReminderQuotation, fetchContactsInQuotation, fetchQuotation,
+    fetchQuotationDetailsByID, updateQuotation, uploadQuotationDocument,
+    viewFile
 } from '../controllers/quotationController.js';
 import { fetchParameterListForGST } from '../controllers/parameterController.js';
 import { fetchInvoiceReminderLogs } from '../controllers/invoiceReminderLogController.js';
 import {
     addInvoice, addRCTI, deleteInvoiceDocument, emailReminderInvoice, fetchCustomerInInvoice,
-    fetchDebts, fetchInvoiceDetailsByID, fetchInvoiceDetailsByIDNew, fetchInvoices, fetchItemsForInvoice,
+    fetchDebts, fetchDebtsNew, fetchInvoiceDetailsByID, fetchInvoiceDetailsByIDNew, fetchInvoices, fetchItemsForInvoice,
     fetchQuotationByID, fetchQuotationInInvoice, fetchRCTI, fetchRCTIDetailsByID, fetchSupplierForRCTI,
     submitInvoicePaymentDetails, updateInvoice, updateRCTI, uploadInvoiceDocument
 } from '../controllers/invoiceController.js';
@@ -36,9 +37,12 @@ import fetchAgedPayables from '../controllers/agedPayablesController.js';
 import fetchAgedReceivables from '../controllers/agedReceivablesController.js';
 import {
     addInvoiceReminder, deleteInvoiceReminderTemplate, fetchInvoiceReminderById,
-    fetchInvoiceReminderTemplate, updateInvoiceReminder
+    fetchInvoiceReminderTemplate, fetchLegalDocName, updateInvoiceReminder
 } from '../controllers/invoiceReminderTemplateController.js';
 import { addInvoicePdfFormat, deleteInvoicePdfFormat, fetchInvoicePdfFormat } from '../controllers/invoicePdfFormatController.js';
+import fetchContactReportDetails from '../controllers/contactReportController.js';
+import { fetchBusinessUserDashboardCardData, fetchBusinessUserDashboardCardDataTest } from '../controllers/businessUserDashboardController.js';
+import { fetchExpenseReportDetails } from '../controllers/expenseReportController.js';
 
 const router = express.Router()
 
@@ -121,7 +125,8 @@ router.post("/fetchQuotationDetailsByID", fetchQuotationDetailsByID);
 router.post("/updateQuotation", updateQuotation);
 router.post("/uploadQuotationDocument", uploadQuotationDocument);
 router.post("/deleteQuotationDocument", deleteQuotationDocument)
-
+router.post("/emailReminderQuotation", emailReminderQuotation)
+router.get("/viewFile", viewFile)
 
 //===> Parameter =========>
 router.get("/fetchParameterListForGST", fetchParameterListForGST);
@@ -181,6 +186,14 @@ router.post("/fetchAgedPayables", fetchAgedPayables);
 //===> Aged Receivables =========>
 router.post("/fetchAgedReceivables", fetchAgedReceivables);
 
+//===> ContactReport =========>
+router.post("/fetchContactReportDetails", fetchContactReportDetails);
+
+//===> ExpenseReport =========>
+router.post("/fetchExpenseReportDetails", fetchExpenseReportDetails);
+
+//===> DashboardCardData =========>
+router.post("/fetchBusinessUserDashboardCardData", fetchBusinessUserDashboardCardData);
 
 //===> Invoice Reminder Template =========>
 router.post("/addInvoiceReminder", addInvoiceReminder);
@@ -188,5 +201,11 @@ router.post("/fetchInvoiceReminderById", fetchInvoiceReminderById);
 router.post("/fetchInvoiceReminderTemplate", fetchInvoiceReminderTemplate);
 router.post("/updateInvoiceReminder", updateInvoiceReminder);
 router.post("/deleteInvoiceReminderTemplate", deleteInvoiceReminderTemplate);
+router.post("/fetchLegalDocName", fetchLegalDocName);
+
+
+//===test
+router.post("/fetchBusinessUserDashboardCardDataTest", fetchBusinessUserDashboardCardDataTest);
+router.post("/fetchDebtsNew", fetchDebtsNew);
 
 export default router

@@ -6,7 +6,7 @@ const rctiItemsSchema = mongoose.Schema(
     {
         rctiID: {
             type: mongoose.Schema.Types.ObjectId,
-            required: true,
+            // required: true,
         },
         itemID: {
             type: mongoose.Schema.Types.ObjectId,

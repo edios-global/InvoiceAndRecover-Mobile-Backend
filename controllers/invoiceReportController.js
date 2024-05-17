@@ -10,7 +10,7 @@ import { generateSearchParameterList } from '../routes/genericMethods.js';
 const fetchInvoiceReportData = asyncHandler(async (req, res) => {
     try {
         const post = req.body
-        var query = {}
+        var query = { businessUserID: mongoose.Types.ObjectId(post.businessUserID) };
         let sort = {}
         console.log("fetchInvoiceReportData(post)", post);
         let currentDate = new Date(new Date().setUTCHours(0, 0, 0, 0));
@@ -23,26 +23,36 @@ const fetchInvoiceReportData = asyncHandler(async (req, res) => {
                 tomorrowDate.setDate(tomorrowDate.getDate() + 1);
                 activationsearchDate = { $gte: new Date(currentDate), $lt: new Date(tomorrowDate) }
             }
-            if (post.invoiceDuration === "last7Days") {
+            if (post.invoiceDuration === "last 7 Days") {
                 tomorrowDate.setDate(tomorrowDate.getDate() - 7);
                 activationsearchDate = { $gte: new Date(tomorrowDate), $lt: new Date(currentDate.setDate(currentDate.getDate() + 1)) }
             }
-            if (post.invoiceDuration === "last30Days") {
+            if (post.invoiceDuration === "last 30 Days") {
                 tomorrowDate.setDate(tomorrowDate.getDate() - 30);
                 activationsearchDate = { $gte: new Date(tomorrowDate), $lt: new Date(currentDate.setDate(currentDate.getDate() + 1)) }
             }
-            if (post.invoiceDuration === "last1Year") {
+            if (post.invoiceDuration === "12 months") {
                 tomorrowDate.setFullYear(tomorrowDate.getFullYear() - 1);
                 activationsearchDate = { $gte: new Date(tomorrowDate), $lt: new Date(currentDate.setDate(currentDate.getDate() + 1)) }
+            }
+            if (post.invoiceDuration === "custom date") {
+                let fromDate = new Date(post.fromDate);
+                let toDate = new Date(post.toDate);
+                fromDate.setUTCHours(0, 0, 0, 0);
+                toDate.setUTCHours(0, 0, 0, 0) + 1;
+                toDate.setDate(toDate.getDate() + 1);
+                console.log("qwert", fromDate, toDate)
+                activationsearchDate = { $gte: fromDate, $lt: toDate }
             }
         }
 
         if (post.invoiceDuration !== "" && post.invoiceDuration !== undefined) {
             query.invoiceDate = activationsearchDate
+            console.log(" query.invoiceDate (post)", query.invoiceDate);
         }
 
         let fetchQuery = [
-            { $match: { businessUserID: mongoose.Types.ObjectId(post.businessUserID) } },
+
             {
                 $lookup: {
                     from: 'invoiceitems',
@@ -51,7 +61,8 @@ const fetchInvoiceReportData = asyncHandler(async (req, res) => {
                     as: 'invoiceitems'
                 }
             },
-            { $unwind: '$invoiceitems' },
+            // { $unwind: '$invoiceitems' },
+            { $unwind: { path: "$invoiceitems", preserveNullAndEmptyArrays: true } },
             {
                 $lookup: {
                     from: 'items',
@@ -60,7 +71,8 @@ const fetchInvoiceReportData = asyncHandler(async (req, res) => {
                     as: 'items'
                 }
             },
-            { $unwind: '$items' },
+            // { $unwind: '$items' },
+            { $unwind: { path: "$items", preserveNullAndEmptyArrays: true } },
             {
                 $lookup: {
                     from: 'contacts',
@@ -69,11 +81,13 @@ const fetchInvoiceReportData = asyncHandler(async (req, res) => {
                     as: 'contacts'
                 }
             },
-            { $unwind: '$contacts' },
+            // { $unwind: '$contacts' },
+            { $unwind: { path: "$contacts", preserveNullAndEmptyArrays: true } },
             {
                 $project: {
                     _id: 1,
                     customerName: "$contacts.name",
+                    businessUserID: "$businessUserID",
                     invoiceDate: "$invoiceDate",
                     invoiceNumber: "$invoiceNumber",
                     invoiceStatus: "$invoiceStatus",
@@ -90,7 +104,7 @@ const fetchInvoiceReportData = asyncHandler(async (req, res) => {
                     discountvalue: "$invoiceitems.discountValue",
                     discountAmount: "$invoiceitems.discountAmount",
                     gst: "$invoiceitems.gst",
-                    dueDate: {
+                    dueDate1: {
                         $concat: [
                             {
                                 $let: {
@@ -105,6 +119,12 @@ const fetchInvoiceReportData = asyncHandler(async (req, res) => {
                             { $dateToString: { format: "%d", date: "$dueDate" } }, ", ",
                             { $dateToString: { format: "%Y", date: "$dueDate" } },
                         ]
+                    },
+                    dueDate: {
+                        $dateToString: {
+                            format: "%Y-%m-%d", // Specify the desired format here
+                            date: "$dueDate"
+                        }
                     },
                     invoiceDateString: {
                         $concat: [
@@ -124,13 +144,10 @@ const fetchInvoiceReportData = asyncHandler(async (req, res) => {
                     },
                 }
             },
+            { $match: query },
         ];
-        if (post.invoiceStatus !== "") {
-            query.invoiceStatus = post.invoiceStatus
-        }
-        if (post.customerName !== "" && post.customerName !== undefined) {
-            query.customerName = post.customerName
-        }
+
+
         if (post.filterValues != undefined && post.filterValues != '')
             query.$or = await generateSearchParameterList(post.searchParameterList, post.filterValues);
 

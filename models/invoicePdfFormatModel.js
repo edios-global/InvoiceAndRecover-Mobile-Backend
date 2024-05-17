@@ -61,7 +61,7 @@ const invoicePdfFormatSchema = mongoose.Schema(
         },
         createdDate: {
             type: Date,
-            required: true,
+            // required: true,
         },
         lastModifiedDate: {
             type: Date,

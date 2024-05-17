@@ -49,7 +49,13 @@ const quotationsSchema = mongoose.Schema(
         finalAmount: {
             type: Number,
         },
-        paymentInstruction: {
+        paymentInstructions: {
+            type: String,
+        },
+        description: {
+            type: String,
+        },
+        currencyValue: {
             type: String,
         },
         createdDate: {

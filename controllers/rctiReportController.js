@@ -7,12 +7,11 @@ import RCTI from "../models/rctiModel.js";
 const fetchRCTIReportData = asyncHandler(async (req, res) => {
     try {
         const post = req.body;
-        var query = {};
+        var query = { businessUserID: mongoose.Types.ObjectId(post.businessUserID) };
         let sort = {};
-
+        console.log("fetchRCTIReportData(post)", post);
         let currentDate = new Date(new Date().setUTCHours(0, 0, 0, 0));
         let tomorrowDate = new Date(new Date().setUTCHours(0, 0, 0, 0));
-
 
         let activationsearchDate;
 
@@ -21,26 +20,36 @@ const fetchRCTIReportData = asyncHandler(async (req, res) => {
                 tomorrowDate.setDate(tomorrowDate.getDate() + 1);
                 activationsearchDate = { $gte: new Date(currentDate), $lt: new Date(tomorrowDate) }
             }
-            if (post.rctiDuration === "last7Days") {
+            if (post.rctiDuration === "last 7 Days") {
                 tomorrowDate.setDate(tomorrowDate.getDate() - 7);
                 activationsearchDate = { $gte: new Date(tomorrowDate), $lt: new Date(currentDate.setDate(currentDate.getDate() + 1)) }
             }
-            if (post.rctiDuration === "last30Days") {
+            if (post.rctiDuration === "last 30 Days") {
                 tomorrowDate.setDate(tomorrowDate.getDate() - 30);
                 activationsearchDate = { $gte: new Date(tomorrowDate), $lt: new Date(currentDate.setDate(currentDate.getDate() + 1)) }
             }
-            if (post.rctiDuration === "last1Year") {
+            if (post.rctiDuration === "12 months") {
                 tomorrowDate.setFullYear(tomorrowDate.getFullYear() - 1);
                 activationsearchDate = { $gte: new Date(tomorrowDate), $lt: new Date(currentDate.setDate(currentDate.getDate() + 1)) }
+            }
+            if (post.rctiDuration === "custom date") {
+                let fromDate = new Date(post.fromDate);
+                let toDate = new Date(post.toDate);
+                fromDate.setUTCHours(0, 0, 0, 0);
+                toDate.setUTCHours(0, 0, 0, 0);
+                toDate.setDate(toDate.getDate() + 1);
+                console.log("custom date", fromDate, toDate)
+                activationsearchDate = { $gte: fromDate, $lt: toDate }
             }
         }
 
         if (post.rctiDuration !== "" && post.rctiDuration !== undefined) {
             query.rctiDate = activationsearchDate
+            console.log(" query.rctiDate (post)", query.rctiDate);
         }
 
         let fetchQuery = [
-            { $match: { businessUserID: mongoose.Types.ObjectId(post.businessUserID) } },
+
             {
                 $lookup: {
                     from: 'rcti_items',
@@ -49,7 +58,8 @@ const fetchRCTIReportData = asyncHandler(async (req, res) => {
                     as: 'rctiItems'
                 }
             },
-            { $unwind: '$rctiItems' },
+            // { $unwind: '$rctiItems' },
+            { $unwind: { path: "$rctiItems", preserveNullAndEmptyArrays: true } },
             {
                 $lookup: {
                     from: 'items',
@@ -58,7 +68,8 @@ const fetchRCTIReportData = asyncHandler(async (req, res) => {
                     as: 'items'
                 }
             },
-            { $unwind: '$items' },
+            // { $unwind: '$items' },
+            { $unwind: { path: "$items", preserveNullAndEmptyArrays: true } },
             {
                 $lookup: {
                     from: 'contacts',
@@ -67,11 +78,13 @@ const fetchRCTIReportData = asyncHandler(async (req, res) => {
                     as: 'contacts'
                 }
             },
-            { $unwind: '$contacts' },
+            // { $unwind: '$contacts' },
+            { $unwind: { path: "$contacts", preserveNullAndEmptyArrays: true } },
             {
                 $project: {
                     _id: 1,
                     supplierName: "$contacts.name",
+                    businessUserID: "$businessUserID",
                     rctiDate: "$rctiDate",
                     rctiNumber: "$rctiNumber",
                     rctiStatus: "$rctiStatus",
@@ -88,7 +101,7 @@ const fetchRCTIReportData = asyncHandler(async (req, res) => {
                     discountvalue: "$rctiItems.discountValue",
                     discountAmount: { $toString: "$rctiItems.discountAmount" },
                     gst: { $toString: "$rctiItems.gst" },
-                    dueDate: {
+                    dueDate2: {
                         $concat: [
                             {
                                 $let: {
@@ -103,6 +116,18 @@ const fetchRCTIReportData = asyncHandler(async (req, res) => {
                             { $dateToString: { format: "%d", date: "$dueDate" } }, ", ",
                             { $dateToString: { format: "%Y", date: "$dueDate" } },
                         ]
+                    },
+                    dueDate: {
+                        $dateToString: {
+                            format: "%Y-%m-%d", // Specify the desired format here
+                            date: "$dueDate"
+                        }
+                    },
+                    dueDate1: {
+                        $dateToString: {
+                            format: "%d-%m-%Y", // Specify the desired format here
+                            date: "$dueDate"
+                        }
                     },
                     rctiDateString: {
                         $concat: [
@@ -122,13 +147,9 @@ const fetchRCTIReportData = asyncHandler(async (req, res) => {
                     },
                 }
             },
+            { $match: query },
         ];
-        if (post.rctiStatus !== "") {
-            query.rctiStatus = post.rctiStatus
-        }
-        if (post.customerName !== "" && post.customerName !== undefined) {
-            query.customerName = post.customerName
-        }
+
         if (post.filterValues != undefined && post.filterValues != '')
             query.$or = await generateSearchParameterList(post.searchParameterList, post.filterValues);
         if (post.sortingType && post.sortingField) {

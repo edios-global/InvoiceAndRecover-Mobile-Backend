@@ -14,8 +14,9 @@ function formatDate(date) {
 const fetchAgedPayables = asyncHandler(async (req, res) => {
     try {
         const post = req.body;
+        console.log("dpostg", post);
         let sort = {}
-
+        if (post.signatureKey !== process.env.SIGNATURE_KEY) return res.status(200).json(genericResponse(false, 'Invalid Signature Key!', []));
         const searchQuery = {};
         if (post.filterValues != undefined && post.filterValues != '') {
             searchQuery.$or = await generateSearchParameterList(post.searchParameterList, post.filterValues);

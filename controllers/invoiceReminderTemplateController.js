@@ -4,41 +4,63 @@ import mongoose from 'mongoose';
 import InvoiceReminder from '../models/invoiceReminderTemplateModel.js';
 // import LegalDocumentFormat from '../models/legalDocumentFormatModel.js';
 import { generateSearchParameterList, uploadImageFile } from '../routes/genericMethods.js'
+import LegalDocumentFormats from '../models/legalDocumentFormatsModel.js';
 
 const addInvoiceReminder = asyncHandler(async (req, res) => {
     try {
         const post = req.body;
+        console.log("fg", post);
 
-        var query = { reminderTemplateName: post.reminderTemplateName.trim() }
+        const queryID = { _id: mongoose.Types.ObjectId(post._id) }
 
-        if (post.reminderTemplateName && post.emailBody != "" && post.reminderTemplateName && post.emailBody != undefined) {
-            const fetch = await InvoiceReminder.find(query)
+        let fetchInvoicePdfFormat = await InvoiceReminder.findOne(queryID);
+        console.log("fetchInvoicePdfFormat", fetchInvoicePdfFormat);
+        if (fetchInvoicePdfFormat) {
+            if (req.files) {
+                let returnedFileName = await uploadImageFile(req, "profileFileName");
+                post.uploadLegalDocument = returnedFileName;
+            }
+            var query = { _id: mongoose.Types.ObjectId(post._id) }
+            post.recordType = "U";
+            post.lastModifiedDate = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
+            let newValues = { $set: post }
+            const vv = await InvoiceReminder.updateOne(query, newValues)
+            let successResponse = genericResponse(true, "invoice template reminder update successfully", []);
+            res.status(200).json(successResponse);
+        } else {
+            var query = { reminderTemplateName: post.reminderTemplateName.trim() }
 
-            if (fetch != "" && fetch != undefined) {
+            if (post.reminderTemplateName && post.emailBody != "" && post.reminderTemplateName && post.emailBody != undefined) {
+                const fetch = await InvoiceReminder.find(query)
 
-                let successResponse = genericResponse(false, "invoice template reminder name already exist", []);
-                res.status(200).json(successResponse)
+                if (fetch != "" && fetch != undefined) {
+
+                    let successResponse = genericResponse(false, "invoice template reminder name already exist", []);
+                    res.status(200).json(successResponse)
+                }
+                else {
+                    if (post.legalDocumentID === "None") {
+                        post.legalDocumentStatus = false;
+                        delete post.legalDocumentID;
+                    } else {
+                        post.legalDocumentStatus = true;
+                    }
+                    let addTemplates = new InvoiceReminder(post)
+                    const templateAdded = await addTemplates.save();
+
+                    let successResponse = genericResponse(true, "Invoice Template Reminder Added Successfully", templateAdded);
+                    res.status(200).json(successResponse);
+
+                }
             }
             else {
-                if (post.legalDocumentID === "None") {
-                    post.legalDocumentStatus = false;
-                    delete post.legalDocumentID;
-                } else {
-                    post.legalDocumentStatus = true;
-                }
-                let addTemplates = new InvoiceReminder(post)
-                const templateAdded = await addTemplates.save();
-
-                let successResponse = genericResponse(true, "Invoice Template Reminder Added Successfully", templateAdded);
+                let successResponse = genericResponse(false, "input field cant be blank", []);
                 res.status(200).json(successResponse);
 
             }
         }
-        else {
-            let successResponse = genericResponse(false, "input field cant be blank", []);
-            res.status(200).json(successResponse);
 
-        }
+
 
     } catch (error) {
         console.log("failed to add Invoice reminder ", error);
@@ -50,7 +72,6 @@ const addInvoiceReminder = asyncHandler(async (req, res) => {
 const updateInvoiceReminder = asyncHandler(async (req, res) => {
     try {
         const post = req.body;
-
         if (req.files) {
             let returnedFileName = await uploadImageFile(req, "profileFileName");
             post.uploadLegalDocument = returnedFileName;
@@ -60,6 +81,7 @@ const updateInvoiceReminder = asyncHandler(async (req, res) => {
         const vv = await InvoiceReminder.updateOne(query, newValues)
         let successResponse = genericResponse(true, "invoice template reminder update successfully", []);
         res.status(200).json(successResponse);
+
     } catch (error) {
         console.log("failed to Update invoice template reminder ", error);
         let errorRespnse = genericResponse(false, error.message, []);
@@ -88,21 +110,33 @@ const fetchInvoiceReminderTemplate = asyncHandler(async (req, res) => {
     try {
         const post = req.body;
         var query = {};
+        post.status = "All"
         var sort = {};
         if (post.filterValues != undefined && post.filterValues != '')
             query.$or = await generateSearchParameterList(post.searchParameterList, post.filterValues);
 
         const fetchQuery = [
             { $match: { businessUserID: mongoose.Types.ObjectId(post.businessUserID) } },
-            { $lookup: { from: 'legal_document_formats', localField: 'legalDocumentID', foreignField: '_id', as: 'legalDocument' } },
+            {
+                $lookup:
+                {
+                    from: 'legal_document_formats',
+                    localField: 'legalDocumentID',
+                    foreignField: '_id',
+                    as: 'legalDocument'
+                }
+            },
             { $unwind: { path: "$legalDocument", preserveNullAndEmptyArrays: true } },
             {
                 $project: {
                     reminderTemplateName: "$reminderTemplateName",
-                    status: "$status",
+                    status: "$Status",
                     reminderType: "$reminderType",
                     reminderDays: "$reminderDays",
                     emailSubject: "$emailSubject",
+                    legalDocumentID: {
+                        $cond: { if: { $eq: ['$legalDocumentStatus', true] }, then: "$legalDocument._id", else: "None" }
+                    },
                     legalDocumentRemark: {
                         $cond: { if: { $eq: ['$legalDocumentStatus', true] }, then: "$legalDocument.documentRemark", else: "None" }
                     },
@@ -153,12 +187,66 @@ const fetchInvoiceReminderTemplate = asyncHandler(async (req, res) => {
             }
         );
     } catch (error) {
-        console.log("Catch in fetchStandardFeatures: ", error);
+        console.log("Catch in fetchInvoiceReminderTemplate: ", error);
         let errorRespnse = genericResponse(false, error.message, []);
         res.status(200).json(errorRespnse);
     };
 
 });
+
+// const fetchInvoiceReminderTemplate = asyncHandler(async (req, res) => {
+//     try {
+//         const post = req.body;
+//         var query = { businessUserID: mongoose.Types.ObjectId(post.businessUserID) };
+
+//         const fetchQuery = [
+//             // { $match: {  } },
+//             { $lookup: { from: 'legal_document_formats', localField: 'legalDocumentID', foreignField: '_id', as: 'legalDocument' } },
+//             { $unwind: { path: "$legalDocument", preserveNullAndEmptyArrays: true } },
+//             {
+//                 $project: {
+//                     reminderTemplateName: "$reminderTemplateName",
+//                     status: "$status",
+//                     reminderType: "$reminderType",
+//                     reminderDays: "$reminderDays",
+//                     emailSubject: "$emailSubject",
+//                     businessUserID: "$businessUserID",
+//                     legalDocumentRemark: {
+//                         $cond: { if: { $eq: ['$legalDocumentStatus', true] }, then: "$legalDocument.documentRemark", else: "None" }
+//                     },
+//                     legalDocumentStatus: {
+//                         $cond: {
+//                             if: '$legalDocumentStatus',
+//                             then: "Yes",
+//                             else: "No"
+//                         }
+//                     }
+
+//                 }
+//             },
+//             {
+//                 $match: query
+//             },
+//         ];
+
+//         let myAggregation = InvoiceReminder.aggregate(fetchQuery)
+//         if (myAggregation) {
+
+//             const successResponse = genericResponse(true, "invoice reminder fetched successfully", myAggregation);
+//             res.status(200).json(successResponse);
+
+//         } else {
+//             const errorResponse = genericResponse(false, "Unable to fetch invoice reminders", []);
+//             res.status(400).json(errorResponse);
+//         }
+//     } catch (error) {
+//         console.log("Catch in fetchInvoiceReminderTemplate: ", error);
+//         let errorRespnse = genericResponse(false, error.message, []);
+//         res.status(200).json(errorRespnse);
+//     };
+
+// });
+
 
 const deleteInvoiceReminderTemplate = asyncHandler(async (req, res) => {
     try {
@@ -183,10 +271,27 @@ const deleteInvoiceReminderTemplate = asyncHandler(async (req, res) => {
     }
 });
 
+const fetchLegalDocName = asyncHandler(async (req, res) => {
+    try {
+        const post = req.body;
+        let query = {};
+
+        const fetchContact = await LegalDocumentFormats.find(query, { documentName: 1 })
+        if (fetchContact.length > 0) {
+            let successResponse = genericResponse(true, "fetchInvoiceContacts fetched successfully.", fetchContact);
+            res.status(200).json(successResponse);
+        }
+    } catch (error) {
+        let errorRespnse = genericResponse(false, error.message, []);
+        res.status(400).json(errorRespnse);
+    }
+});
+
 export {
     addInvoiceReminder,
     fetchInvoiceReminderTemplate,
     updateInvoiceReminder,
     fetchInvoiceReminderById,
     deleteInvoiceReminderTemplate,
+    fetchLegalDocName
 }

@@ -18,12 +18,12 @@ const fetchAgedReceivables = asyncHandler(async (req, res) => {
         const post = req.body;
         console.log("<<POST>>", post.customDate)
         let sort = {}
-
+        if (post.signatureKey !== process.env.SIGNATURE_KEY) return res.status(200).json(genericResponse(false, 'Invalid Signature Key!', []));
         const searchQuery = {};
         if (post.filterValues != undefined && post.filterValues != '') {
             searchQuery.$or = await generateSearchParameterList(post.searchParameterList, post.filterValues);
         }
-        let currentDate = new Date("2024-07-02");
+        let currentDate = new Date();
         let durationDate;
         console.log("currentDate", currentDate);
         switch (post.duration) {
@@ -75,7 +75,6 @@ const fetchAgedReceivables = asyncHandler(async (req, res) => {
         if (post.agingBy === "dueDate") {
             onDate = "$dueDate"
         }
-
         const fetchList = [
             {
                 $match: {
