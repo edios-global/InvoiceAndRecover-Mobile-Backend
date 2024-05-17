@@ -292,7 +292,7 @@ export async function sendMailBySendGrid(receiver, subject, emailTemplate) {
     try {
         console.log("Sending mail using SendGrid", receiver, subject, emailTemplate);
         new Promise(resolve => {
-            sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+            sgMail.setApiKey("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");
             const msg = {
                 from: process.env.SEND_GRID_VERIFIED_EMAIL_PROD,
                 to: receiver,
@@ -457,7 +457,7 @@ export async function sendEmailBySendGrid(receiver, subject, emailTemplate) {
     try {
         console.log("Sending mail using SendGrid");
         new Promise(resolve => {
-            sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+            sgMail.setApiKey("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");
             const msg = {
                 from: process.env.SEND_GRID_VERIFIED_EMAIL_PROD,
                 to: receiver,
@@ -863,18 +863,20 @@ export async function copyFile(sourcePath, destinationFileFolder, callback) {
     });
 }
 
-export async function uploadQuotationFile(req, imagePrefix, mainFolderName = null) {
+export async function uploadQuotationFile(req, imagePrefix, mainFolderName = null, QID) {
+
     return new Promise(resolve => {
         try {
             let fileURL = process.env.LOCATION_PATH;
             const fs = require("fs")
-            const subfolderName = req.body.quotationID;
+            const subfolderName = QID;
             if (mainFolderName) {
                 fileURL = fileURL + mainFolderName + "/"; // Append the main folder name to the base path
             }
             fileURL = fileURL + subfolderName;
             const newpath = fileURL + "/";
             const file = req.files && req.files.file; // Check if the file object exists
+            console.log("file", file);
             let fileObj = req.files?.file;
             let onlyFileName = imagePrefix;
             let currentDate = new Date();
@@ -910,18 +912,19 @@ export async function uploadQuotationFile(req, imagePrefix, mainFolderName = nul
     });
 };
 
-export async function uploadInvoiceFile(req, imagePrefix, mainFolderName = null) {
+export async function uploadInvoiceFile(req, imagePrefix, mainFolderName = null, IID) {
     return new Promise(resolve => {
         try {
             let fileURL = process.env.LOCATION_PATH;
             const fs = require("fs")
-            const subfolderName = req.body.invoiceID;
+            const subfolderName = IID;
             if (mainFolderName) {
                 fileURL = fileURL + mainFolderName + "/"; // Append the main folder name to the base path
             }
             fileURL = fileURL + subfolderName;
             const newpath = fileURL + "/";
             const file = req.files && req.files.file; // Check if the file object exists
+            console.log("df", file);
             let fileObj = req.files?.file[0];
             let onlyFileName = imagePrefix;
             let currentDate = new Date();

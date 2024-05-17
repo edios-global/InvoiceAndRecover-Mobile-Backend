@@ -178,10 +178,17 @@ const addInvoice = asyncHandler(async (req, res) => {
         console.log("addinvoice post :-", post);
         console.log("retentionData post :-", typeof post.retentionData);
 
+        if (!post.businessUserID) {
+            return res.status(204).json(genericResponse(false, "Business UserID is missing.", []));
+        }
+
+        // if (post.businessUserID !== 'undefined') {
+        //     return res.status(204).json(genericResponse(false, "Business UserID is undefined.", []));
+        // }
         let query = { businessUserID: mongoose.Types.ObjectId(post.businessUserID) };
-        const fetchInvoice = await DefaultSetting.findOne(query, { invoicePrefix: 1, invoiceStartNumber: 1, });
+        const fetchInvoice = await DefaultSetting.findOne(query, { invoicePrefix: 1, invoiceStartNumber: 1, currencyValue: 1 });
         if (fetchInvoice && fetchInvoice.invoicePrefix && fetchInvoice.invoiceStartNumber) {
-            const InvoiceStartNumber = await getNextSequenceValue("invoiceNumber", post.businessUserID, fetchInvoice.invoiceStartNumber);
+            const InvoiceStartNumber = await getNextSequenceValue("invoiceNumber", post.businessUserID, fetchInvoice.invoiceStartNumber,);
             if (!InvoiceStartNumber) {
                 return res.status(200).json(genericResponse(false, "Invoice not Added. Error in generating Invoice Number.", []));
             }
@@ -194,26 +201,29 @@ const addInvoice = asyncHandler(async (req, res) => {
             post.currencyValue = fetchInvoice.currencyValue;
             post.invoiceStatus = "Unpaid";
 
-            if (post.invoiceType = "Through Quotation") {
+            if (post.invoiceType === "Through Quotation") {
+                console.log(" post.invoiceType 0", post.invoiceType);
                 post.totalAmount = parseFloat(post.totalAmount).toFixed(2);
                 post.totalDiscountAmount = parseFloat(post.totalDiscountAmount).toFixed(2);
                 post.finalAmount = parseFloat(post.finalAmount).toFixed(2);
 
             } else {
+                console.log(" post.invoiceType 1", post.invoiceType);
                 delete post.quotationID
             }
             post.payablePendingAmount = parseFloat(post.finalAmount).toFixed(2);
-            if (post.retentionData !== '[]') {
+            if (post.retentionData !== undefined || post.retentionData !== '[]') {
                 post.scheduleRetention = true;
             } else {
                 post.scheduleRetention = false;
             }
             const addedInvoice = await new InvoiceModel(post).save();
-
+            let IID = addedInvoice._id;
             if (addedInvoice._id) {
                 console.log("addedInvoice._id :-", addedInvoice._id);
-
-                if (post.retentionData !== 'undefined') {
+                console.log("post.retentionData ", post.retentionData);
+                if (post.retentionData !== undefined || post.retentionData !== '[]') {
+                    console.log("fghf :-", post.retentionData);
                     await InvoiceRetentionPaymentsModel.deleteMany({ invoiceID: mongoose.Types.ObjectId(addedInvoice._id) });
                     let retentionfile = JSON.parse(post.retentionData);
                     console.log("retentionfile :-", retentionfile);
@@ -231,8 +241,11 @@ const addInvoice = asyncHandler(async (req, res) => {
                         count++;
                     }
                     await InvoiceRetentionPaymentsModel.insertMany(RetentionList);
+
                 }
-                if (post.invoiceType = "Through Quotation") {
+
+
+                if (post.invoiceType === "Through Quotation") {
 
                     // Parse the JSON string into an array of objects
                     let ItemsList = JSON.parse(post.ItemsList);
@@ -240,13 +253,16 @@ const addInvoice = asyncHandler(async (req, res) => {
                     for (const element of ItemsList) {
                         console.log("addinvoice element :-", element);
                         delete element._id;
+                        delete element.lastModifiedDate;
                         element.itemPrice = parseFloat(element.itemPrice).toFixed(2);
                         element.itemQuantity = parseFloat(element.itemQuantity).toFixed(2);
                         element.gst = parseFloat(element.gst).toFixed(2);
                         element.priceValidityValue = parseFloat(element.priceValidityValue).toFixed(2);
                         element.discountValue = parseFloat(element.discountValue).toFixed(2);
-                        // Assuming you want to set discountAmount to 0 here since it's not provided in the input
-                        element.discountAmount = 0;
+                        if (!element.discountAmount) {
+                            // Assuming you want to set discountAmount to 0 here since it's not provided in the input
+                            element.discountAmount = 0;
+                        }
                         element.createdDate = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
                         element.recordType = "I";
                         element.invoiceID = addedInvoice._id;
@@ -276,7 +292,43 @@ const addInvoice = asyncHandler(async (req, res) => {
                     // } else {
                     //     return res.status(200).json(genericResponse(false, "Invoice Added Successfully. Error in saving Invoice Items.", { _id: addedInvoice._id }));
                     // }
+                } else {
+                    // let ItemsList = post.ItemsList;
+                    let ItemsList = JSON.parse(post.ItemsList);
+                    let addedInvoiceItem = []
+                    for (const element of ItemsList) {
+                        console.log("addinvoice element :-", element);
+                        delete element._id;
+                        element.itemPrice = parseFloat(element.itemPrice).toFixed(2);
+                        element.itemQuantity = parseFloat(element.itemQuantity).toFixed(2);
+                        element.gst = parseFloat(element.gst).toFixed(2);
+                        element.priceValidityValue = parseFloat(element.priceValidityValue).toFixed(2);
+                        element.discountValue = parseFloat(element.discountValue).toFixed(2);
+                        if (!element.discountAmount) {
+                            // Assuming you want to set discountAmount to 0 here since it's not provided in the input
+                            element.discountAmount = 0;
+                        }
+
+                        element.createdDate = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
+                        element.recordType = "I";
+                        element.invoiceID = addedInvoice._id;
+                        addedInvoiceItem = await new InvoiceItems(element).save();
+                    }
                 }
+                console.log("req.files ", req.files);
+                // if (req.files !== null) {
+                //     const DocumentName = JSON.parse(post.DocumentName);
+                //     console.log("DocumentName", DocumentName);
+                //     const returnedFileName = await uploadInvoiceFile(req, DocumentName, "invoiceDocuments", IID);
+                //     post.documentFileName = returnedFileName;
+                //     console.log("documentFileName", post.documentFileName);
+                //     post.invoiceID = addedInvoice._id;
+                //     post.documentName = DocumentName;
+                //     post.referenceFolder = "invoiceDocuments/" + addedInvoice._id.toString();
+                //     post.uploadedDateTime = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
+                //     post.createdDate = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
+                //     const insertedDoc = await InvoiceDocuments(post).save();
+                // }
                 return res.status(200).json(genericResponse(true, "Invoice Added Successfully.", { _id: addedInvoice._id }));
             } else {
                 return res.status(200).json(genericResponse(false, "Invoice not Added. Error in saving Invoice.", []));
@@ -290,6 +342,7 @@ const addInvoice = asyncHandler(async (req, res) => {
 });
 
 const updateInvoice = asyncHandler(async (req, res) => {
+
     try {
         let post = req.body;
         delete post._id;
@@ -304,7 +357,9 @@ const updateInvoice = asyncHandler(async (req, res) => {
         }
 
         post.totalAmount = parseFloat(post.totalAmount).toFixed(2);
-        post.totalDiscountAmount = parseFloat(post.totalDiscountAmount).toFixed(2);
+        if (post.totalDiscountAmount) {
+            post.totalDiscountAmount = parseFloat(post.totalDiscountAmount).toFixed(2);
+        }
         post.finalAmount = parseFloat(post.finalAmount).toFixed(2);
         if (post.invoiceStatus === "Unpaid") { post.payablePendingAmount = post.finalAmount; }
         let Items = JSON.parse(post.ItemsList);
@@ -316,13 +371,17 @@ const updateInvoice = asyncHandler(async (req, res) => {
             let gstValue = parseFloat(element.gst).toFixed(2);
             // element.priceValidityValue = parseFloat(element.priceValidityValue).toFixed(2);
             element.discountValue = parseFloat(element.discountValue).toFixed(2);
-            element.discountAmount = parseFloat(element.discountAmount).toFixed(2);
+            if (element.discountAmount && element.discountAmount !== "NaN") {
+                element.discountAmount = parseFloat(element.discountAmount).toFixed(2);
+            } else {
+                element.discountAmount = 0
+            }
 
             delete element.gst;
-            await items.updateOne(
-                { _id: mongoose.Types.ObjectId(element.itemID) },
-                { $set: element }
-            );
+            // await items.updateOne(
+            //     { _id: mongoose.Types.ObjectId(element.itemID) },
+            //     { $set: element }
+            // );
 
             element.gst = gstValue;
             element.createdDate = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
@@ -334,8 +393,7 @@ const updateInvoice = asyncHandler(async (req, res) => {
         if (ItemsList) {
             await InvoiceItems.deleteMany({ invoiceID: mongoose.Types.ObjectId(post.invoiceID) });
             let insertItems = await InvoiceItems.insertMany(ItemsList);
-
-
+            console.log("insertItems: ", insertItems);
             if (insertItems) {
                 let updateInvoice = null;
                 post.recordType = "U";
@@ -349,7 +407,7 @@ const updateInvoice = asyncHandler(async (req, res) => {
                     { _id: mongoose.Types.ObjectId(post.invoiceID) }, { $set: post }
                 )
                 console.log("updateInvoice :-", updateInvoice);
-                if (post.retentionData !== 'undefined') {
+                if (post.retentionData !== '[]') {
                     await InvoiceRetentionPaymentsModel.deleteMany({ invoiceID: mongoose.Types.ObjectId(post.invoiceID) });
                     let retentionfile = JSON.parse(post.retentionData);
                     console.log("retentionfile :-", retentionfile);
@@ -368,6 +426,20 @@ const updateInvoice = asyncHandler(async (req, res) => {
                     }
                     await InvoiceRetentionPaymentsModel.insertMany(RetentionList);
                 }
+
+                // if (req.files !== null) {
+                //     const DocumentName = JSON.parse(post.DocumentName);
+                //     console.log("DocumentName", DocumentName);
+                //     const returnedFileName = await uploadQuotationFile(req, DocumentName, "invoiceDocuments", post.invoiceID);
+                //     post.documentFileName = returnedFileName;
+                //     console.log("documentFileName", post.documentFileName);
+                //     post.invoiceID = post.invoiceID;
+                //     post.documentName = DocumentName;
+                //     post.referenceFolder = "invoiceDocuments/" + post.invoiceID.toString();
+                //     post.uploadedDateTime = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
+                //     post.createdDate = new Date(new Date() - (new Date().getTimezoneOffset() * 60000));
+                //     const insertedDoc = await InvoiceDocuments(post).save();
+                // }
 
 
                 if (updateInvoice.n === 1) {
@@ -526,12 +598,15 @@ const emailReminderInvoice = asyncHandler(async (req, res) => {
 
             ]);
             console.log("fetchInvoice ", fetchInvoice);
-
+            console.log("fetchInvoice.length", fetchInvoice.length);
             if (fetchInvoice.length > 0 && (fetchInvoice[0].invoiceStatus === 'Unpaid')) {
+                console.log("testing");
                 let InvoiceData = fetchInvoice[0];
                 let customerEmail = [];
+
                 customerEmail.push(InvoiceData.customerEmail);
-                if (InvoiceData.otherEmailAddress.length > 0) {
+
+                if (InvoiceData.otherEmailAddress && InvoiceData.otherEmailAddress.length > 0) {
                     InvoiceData.otherEmailAddress.forEach(email => {
                         if (validateEmail(email)) {
                             customerEmail.push(email);
@@ -729,7 +804,7 @@ const fetchInvoiceDetailsByID = asyncHandler(async (req, res) => {
 
                 }
             },
-            { $unwind: { path: "$items", preserveNullAndEmptyArrays: true } },
+            // { $unwind: { path: "$items", preserveNullAndEmptyArrays: true } },
             {
                 $lookup: {
                     from: "invoicedocuments",
@@ -739,7 +814,7 @@ const fetchInvoiceDetailsByID = asyncHandler(async (req, res) => {
 
                 }
             },
-            { $unwind: { path: "$invoiceDocuments", preserveNullAndEmptyArrays: true } },
+            // { $unwind: { path: "$invoiceDocuments", preserveNullAndEmptyArrays: true } },
 
             {
                 $lookup: {
@@ -877,7 +952,7 @@ const submitInvoicePaymentDetails = asyncHandler(async (req, res) => {
         let fetchInvoice = await InvoiceModel.findOne(query);
         console.log("fetchInvoice", fetchInvoice);
 
-        if (fetchInvoice?.invoicePayment?.length > 0 &&
+        if (fetchInvoice?.invoicePayment && fetchInvoice?.invoicePayment?.length > 0 &&
             fetchInvoice.invoicePayment.some((paid) => paid.paymentTransactionID === post.paymentTransactionID)) {
             return res.status(200).json(genericResponse(false, "The payment has already been made with this transaction ID, please enter the correct Transaction ID.", []));
         }
@@ -893,7 +968,7 @@ const submitInvoicePaymentDetails = asyncHandler(async (req, res) => {
             console.log("scheduleRetention ", fetchInvoice.scheduleRetention);
             let fetchRetention = await InvoiceRetentionPaymentsModel.findOne({ invoiceID: mongoose.Types.ObjectId(post.invoiceID) });
             console.log("fetchRetention ", fetchRetention);
-            if (fetchRetention.length > 0 &&
+            if (fetchRetention && fetchRetention.length > 0 &&
                 fetchRetention.some((paid) => paid.paymentTransactionID === post.paymentTransactionID)) {
                 return res.status(200).json(genericResponse(false, "The payment has already been made with this transaction ID, please enter the correct Transaction ID.", []));
             }
@@ -1170,16 +1245,138 @@ const fetchDebts = asyncHandler(async (req, res) => {
 
         if (fetched.length > 0) {
             // console.log("fetched", fetched);
-            let successResponse = genericResponse(true, "Invoices fetched successfully.", fetched);
+            let successResponse = genericResponse(true, "Debts fetched successfully.", fetched);
             res.status(200).json(successResponse);
 
         } else {
-            let errorRespnse = genericResponse(false, "Invoices less than today's date is not found.", []);
+            let errorRespnse = genericResponse(false, "Debts less than today's date is not found.", []);
             res.status(204).json(errorRespnse);
 
         }
     } catch (error) {
         console.log("Error in fetchInvoices:", error.message);
+        return res.status(400).json(genericResponse(false, error.message, []));
+    }
+});
+
+const fetchDebtsNew = asyncHandler(async (req, res) => {
+
+    const post = req.body;
+    try {
+        let query = {};
+        let currentDate = new Date().toISOString().slice(0, 10);
+
+        let fetched = await InvoiceModel.aggregate([
+
+            {
+                $match: {
+                    businessUserID: mongoose.Types.ObjectId(post.businessUserID)
+                }
+            },
+            {
+                $lookup: {
+                    from: 'contacts',
+                    localField: "contactID",
+                    foreignField: "_id",
+                    as: "contact"
+                }
+            },
+            { $unwind: "$contact" },
+            {
+                $lookup: {
+                    from: 'quotations',
+                    localField: "quotationID",
+                    foreignField: "_id",
+                    as: "quotation"
+                }
+            },
+            { $unwind: { path: "$quotation", preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: 'invoice_retention_payments',
+                    localField: "_id",
+                    foreignField: "invoiceID",
+                    as: "retentions"
+                }
+            },
+            { $unwind: { path: "$retentions", preserveNullAndEmptyArrays: true } },
+            {
+                $project: {
+                    _id: 1,
+                    retentions: 1,
+                    invoiceNumber: 1,
+                    invoiceType: 1,
+                    customerName: "$contact.name",
+                    quotationNumber: "$quotation.quotationNumber",
+                    invoiceDate: 1,
+                    invoiceDateString: { "$dateToString": { "format": "%b %d, %Y", "date": "$invoiceDate" } },
+                    scheduleRetention: {
+                        $cond: {
+                            if: "$scheduleRetention",
+                            then: "Yes",
+                            else: "No",
+                        }
+                    },
+                    paymentStatus: {
+                        $cond: {
+                            if: "$scheduleRetention",
+                            then: "$retentions.retentionPaymentAmount",
+                            else: {
+                                $cond: {
+                                    if: { $eq: ["$invoiceStatus", "Partial Paid"] },
+                                    then: { $concat: [{ $toString: { $round: [{ $subtract: ["$finalAmount", "$payablePendingAmount"] }, 2] } }, "/", { $toString: "$finalAmount" }] },
+                                    else: { $toString: "$finalAmount" }
+                                }
+                            }
+                        }
+                    },
+                    invoiceStatus: {
+                        $cond: {
+                            if: "$scheduleRetention",
+                            then: "$retentions.retentionStatus",
+                            else: "$invoiceStatus",
+                        }
+                    },
+                    dueDateString: {
+                        $cond: {
+                            if: "$scheduleRetention",
+                            then: { "$dateToString": { "format": "%b %d, %Y", "date": "$retentions.retentionDueDate" } },
+                            else: { "$dateToString": { "format": "%b %d, %Y", "date": "$dueDate" } },
+                        }
+                    },
+                    dueDate: {
+                        $cond: {
+                            if: "$scheduleRetention",
+                            then: "$retentions.retentionDueDate",
+                            else: "$dueDate",
+                        }
+                    },
+                    retentionNumber: {
+                        $cond: {
+                            if: "$scheduleRetention",
+                            then: "$retentions.retentionNumber",
+                            else: "",
+                        }
+                    }
+
+                }
+            },
+            { $match: { $expr: { $lt: [{ $dateToString: { "format": "%Y-%m-%d", date: "$dueDate" } }, currentDate] } } },
+            { $match: query },
+        ]);
+
+        if (fetched.length > 0) {
+            // console.log("fetched", fetched);
+            let successResponse = genericResponse(true, "Debts fetched successfully.", fetched);
+            res.status(200).json(successResponse);
+
+        } else {
+            let errorRespnse = genericResponse(false, "Debts less than today's date is not found.", []);
+            res.status(204).json(errorRespnse);
+
+        }
+    } catch (error) {
+        console.log("Error in fetchDebt:", error.message);
         return res.status(400).json(genericResponse(false, error.message, []));
     }
 });
@@ -1250,9 +1447,7 @@ const addRCTI = asyncHandler(async (req, res) => {
                 let addedInvoiceItem = []
                 for (const element of ItemsList) {
                     console.log("addinvoice element :-", element);
-                    delete element.createdDate;
-                    delete element.recordType;
-                    delete element.lastModifiedDate;
+
                     element.itemPrice = parseFloat(element.itemPrice).toFixed(2);
                     element.itemQuantity = parseFloat(element.itemQuantity).toFixed(2);
                     element.gst = parseFloat(element.gst).toFixed(2);
@@ -1264,6 +1459,10 @@ const addRCTI = asyncHandler(async (req, res) => {
                     element.recordType = "I";
                     element.itemID = element._id;
                     element.rctiID = addedRCTI._id;
+                    delete element.createdDate;
+                    delete element.recordType;
+                    delete element.lastModifiedDate;
+                    delete element._id;
                     addedInvoiceItem = await new RCTI_Items(element).save();
                 }
 
@@ -1411,7 +1610,7 @@ const fetchRCTIDetailsByID = asyncHandler(async (req, res) => {
 
                 }
             },
-            { $unwind: { path: "$rctiItems", preserveNullAndEmptyArrays: true } },
+            // { $unwind: { path: "$rctiItems", preserveNullAndEmptyArrays: true } },
             {
                 $lookup: {
                     from: "rcti_documents",
@@ -1421,7 +1620,7 @@ const fetchRCTIDetailsByID = asyncHandler(async (req, res) => {
 
                 }
             },
-            { $unwind: { path: "$rctiDocuments", preserveNullAndEmptyArrays: true } },
+            // { $unwind: { path: "$rctiDocuments", preserveNullAndEmptyArrays: true } },
 
             {
                 $lookup: {
@@ -1432,7 +1631,7 @@ const fetchRCTIDetailsByID = asyncHandler(async (req, res) => {
 
                 }
             },
-            { $unwind: { path: "$contacts", preserveNullAndEmptyArrays: true } },
+            // { $unwind: { path: "$contacts", preserveNullAndEmptyArrays: true } },
 
             {
                 $project: {
@@ -1494,6 +1693,7 @@ const updateRCTI = asyncHandler(async (req, res) => {
         if (!post.rctiID) {
             return res.status(204).json(genericResponse(false, "rcti ID is missing.", []));
         }
+
         post.totalAmount = parseFloat(post.totalAmount).toFixed(2);
         if (post.totalDiscountAmount) {
             post.totalDiscountAmount = parseFloat(post.totalDiscountAmount).toFixed(2);
@@ -1510,8 +1710,11 @@ const updateRCTI = asyncHandler(async (req, res) => {
             let gstValue = parseFloat(element.gst).toFixed(2);
             // element.priceValidityValue = parseFloat(element.priceValidityValue).toFixed(2);
             element.discountValue = parseFloat(element.discountValue).toFixed(2);
-            element.discountAmount = parseFloat(element.discountAmount).toFixed(2);
-
+            if (element.discountAmount && element.discountAmount !== "NaN") {
+                element.discountAmount = parseFloat(element.discountAmount).toFixed(2);
+            } else {
+                element.discountAmount = 0
+            }
             // delete element.gst;
             // await RCTI_Items.updateOne(
             //     { _id: mongoose.Types.ObjectId(element.itemID) },
@@ -2151,6 +2354,7 @@ export {
     uploadInvoiceDocument,
     deleteInvoiceDocument,
     fetchDebts,
+    fetchDebtsNew,
 
     emailReminderInvoice,
     submitInvoicePaymentDetails,

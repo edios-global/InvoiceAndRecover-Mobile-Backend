@@ -10,13 +10,39 @@ import { fetchRoles } from '../controllers/rolesController.js';
 import { addCategory, deleteCategory, fetchCategoryById, fetchCategory, updateCategory, fetchCategoryName } from '../controllers/itemCategoriesController.js';
 import { addContact, deleteContact, fetchContactDetailsById, fetchContactName, fetchContacts, updateContact } from '../controllers/contactController.js';
 import { addItem, deleteItem, fetchItems, updateItem } from '../controllers/itemsController.js';
-import { addAndUpdateDefaultSettings, addorUpdateDefaultSettings, deleteBusinessUserSignature, fetchDefaultSettingCurrency, fetchDefaultSettings, updateBusinessUserSignature, updateDefaultSettings, uploadBusinessUserlogo, uploadBusinessUserSignature, viewUploadedBusinessUserSignature } from '../controllers/defaultsettingsController.js';
+import {
+    addorUpdateDefaultSettings, deleteBusinessUserSignature, fetchDefaultSettingCurrency,
+    fetchDefaultSettings, updateBusinessUserSignature, updateDefaultSettings, uploadBusinessUserlogo,
+    uploadBusinessUserSignature, viewUploadedBusinessUserSignature
+} from '../controllers/defaultsettingsController.js';
 import { addExpense, deleteExpense, fetchExpenses, fetchSupplierInExpense, updateExpense } from '../controllers/expenseController.js';
 import { fetchInvoiceReminderTemplates, updateInvoiceReminderTemplate } from '../controllers/templatesController.js';
-import { addQuotation, deleteQuotationDocument, fetchContactsInQuotation, fetchQuotation, fetchQuotationDetailsByID, updateQuotation, uploadQuotationDocument } from '../controllers/quotationController.js';
+import {
+    addQuotation, deleteQuotationDocument, emailReminderQuotation, fetchContactsInQuotation, fetchQuotation,
+    fetchQuotationDetailsByID, updateQuotation, uploadQuotationDocument,
+    viewFile
+} from '../controllers/quotationController.js';
 import { fetchParameterListForGST } from '../controllers/parameterController.js';
 import { fetchInvoiceReminderLogs } from '../controllers/invoiceReminderLogController.js';
-import { addInvoice, addRCTI, deleteInvoiceDocument, emailReminderInvoice, fetchCustomerInInvoice, fetchDebts, fetchInvoiceDetailsByID, fetchInvoiceDetailsByIDNew, fetchInvoices, fetchItemsForInvoice, fetchQuotationByID, fetchQuotationInInvoice, fetchRCTI, fetchRCTIDetailsByID, fetchSupplierForRCTI, submitInvoicePaymentDetails, updateInvoice, updateRCTI, uploadInvoiceDocument } from '../controllers/invoiceController.js';
+import {
+    addInvoice, addRCTI, deleteInvoiceDocument, emailReminderInvoice, fetchCustomerInInvoice,
+    fetchDebts, fetchDebtsNew, fetchInvoiceDetailsByID, fetchInvoiceDetailsByIDNew, fetchInvoices, fetchItemsForInvoice,
+    fetchQuotationByID, fetchQuotationInInvoice, fetchRCTI, fetchRCTIDetailsByID, fetchSupplierForRCTI,
+    submitInvoicePaymentDetails, updateInvoice, updateRCTI, uploadInvoiceDocument
+} from '../controllers/invoiceController.js';
+import { fetchQuotationContacts, fetchQuotationReportData } from '../controllers/quotationReportController.js';
+import { fetchRCTIContacts, fetchRCTIReportData } from '../controllers/rctiReportController.js';
+import { fetchInvoiceContacts, fetchInvoiceReportData } from '../controllers/invoiceReportController.js';
+import fetchAgedPayables from '../controllers/agedPayablesController.js';
+import fetchAgedReceivables from '../controllers/agedReceivablesController.js';
+import {
+    addInvoiceReminder, deleteInvoiceReminderTemplate, fetchInvoiceReminderById,
+    fetchInvoiceReminderTemplate, fetchLegalDocName, updateInvoiceReminder
+} from '../controllers/invoiceReminderTemplateController.js';
+import { addInvoicePdfFormat, deleteInvoicePdfFormat, fetchInvoicePdfFormat } from '../controllers/invoicePdfFormatController.js';
+import fetchContactReportDetails from '../controllers/contactReportController.js';
+import { fetchBusinessUserDashboardCardData, fetchBusinessUserDashboardCardDataTest } from '../controllers/businessUserDashboardController.js';
+import { fetchExpenseReportDetails } from '../controllers/expenseReportController.js';
 
 const router = express.Router()
 
@@ -99,7 +125,8 @@ router.post("/fetchQuotationDetailsByID", fetchQuotationDetailsByID);
 router.post("/updateQuotation", updateQuotation);
 router.post("/uploadQuotationDocument", uploadQuotationDocument);
 router.post("/deleteQuotationDocument", deleteQuotationDocument)
-
+router.post("/emailReminderQuotation", emailReminderQuotation)
+router.get("/viewFile", viewFile)
 
 //===> Parameter =========>
 router.get("/fetchParameterListForGST", fetchParameterListForGST);
@@ -133,5 +160,52 @@ router.post("/addRCTI", addRCTI);
 router.post("/fetchRCTI", fetchRCTI);
 router.post("/fetchRCTIDetailsByID", fetchRCTIDetailsByID);
 router.post("/updateRCTI", updateRCTI);
+
+
+//===> Invoice Themes (Invoice PDF Format) =========>
+router.post("/addInvoicePdfFormat", addInvoicePdfFormat);
+router.post("/fetchInvoicePdfFormat", fetchInvoicePdfFormat);
+router.post("/deleteInvoicePdfFormat", deleteInvoicePdfFormat);
+
+
+//===> Quotation Report =========>
+router.post("/fetchQuotationReportData", fetchQuotationReportData);
+router.post("/fetchQuotationContacts", fetchQuotationContacts);
+
+//===> RCTI Report =========>
+router.post("/fetchRCTIReportData", fetchRCTIReportData);
+router.post("/fetchRCTIContacts", fetchRCTIContacts);
+
+//===> Invoice Report =========>
+router.post("/fetchInvoiceReportData", fetchInvoiceReportData);
+router.post("/fetchInvoiceContacts", fetchInvoiceContacts);
+
+//===> Aged Payables =========>
+router.post("/fetchAgedPayables", fetchAgedPayables);
+
+//===> Aged Receivables =========>
+router.post("/fetchAgedReceivables", fetchAgedReceivables);
+
+//===> ContactReport =========>
+router.post("/fetchContactReportDetails", fetchContactReportDetails);
+
+//===> ExpenseReport =========>
+router.post("/fetchExpenseReportDetails", fetchExpenseReportDetails);
+
+//===> DashboardCardData =========>
+router.post("/fetchBusinessUserDashboardCardData", fetchBusinessUserDashboardCardData);
+
+//===> Invoice Reminder Template =========>
+router.post("/addInvoiceReminder", addInvoiceReminder);
+router.post("/fetchInvoiceReminderById", fetchInvoiceReminderById);
+router.post("/fetchInvoiceReminderTemplate", fetchInvoiceReminderTemplate);
+router.post("/updateInvoiceReminder", updateInvoiceReminder);
+router.post("/deleteInvoiceReminderTemplate", deleteInvoiceReminderTemplate);
+router.post("/fetchLegalDocName", fetchLegalDocName);
+
+
+//===test
+router.post("/fetchBusinessUserDashboardCardDataTest", fetchBusinessUserDashboardCardDataTest);
+router.post("/fetchDebtsNew", fetchDebtsNew);
 
 export default router

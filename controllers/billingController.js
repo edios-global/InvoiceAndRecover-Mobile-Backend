@@ -122,6 +122,7 @@ const fetchCurrentPlanDetails = asyncHandler(async (req, res) => {
   }
 
 });
+
 const fetchSubscriptionPlans = asyncHandler(async (req, res) => {
   const post = req.body;
   try {
@@ -140,6 +141,7 @@ const fetchSubscriptionPlans = asyncHandler(async (req, res) => {
     res.status(400).json(errorRespnse)
   }
 });
+
 const fetchcards = asyncHandler(async (req, res) => {
   const post = req.body;
   try {
@@ -187,6 +189,7 @@ const fetchcards = asyncHandler(async (req, res) => {
     res.status(400).json(errorRespnse)
   }
 });
+
 const fetchPaymentIntent = asyncHandler(async (req, res) => {
   const post = req.body;
   try {
@@ -232,6 +235,7 @@ const fetchPaymentIntent = asyncHandler(async (req, res) => {
     res.status(400).json(errorRespnse)
   }
 });
+
 const cardDelete = asyncHandler(async (req, res) => {
   const post = req.body;
   try {
@@ -252,6 +256,7 @@ const cardDelete = asyncHandler(async (req, res) => {
     res.status(400).json(errorRespnse)
   }
 });
+
 const setDefaultCard = asyncHandler(async (req, res) => {
   const post = req.body;
   try {
@@ -514,7 +519,6 @@ const changeSubscriptionPlan = asyncHandler(async (req, res) => {
   }
 });
 
-
 const payWithSavedCard = asyncHandler(async (req, res) => {
   const post = req.body;
   console.log("sadfasdfa", post)
@@ -774,8 +778,6 @@ const payWithSavedCard = asyncHandler(async (req, res) => {
   }
 });
 
-
-
 const changeToBasic = asyncHandler(async (req, res) => {
   try {
 
@@ -967,8 +969,6 @@ const changeToBasic = asyncHandler(async (req, res) => {
   }
 });
 
-
-
 const cancelSubscription = asyncHandler(async (req, res) => {
   try {
     const post = req.body;
@@ -1092,6 +1092,7 @@ const cancelSubscription = asyncHandler(async (req, res) => {
     res.status(400).json(errorRespnse);
   }
 })
+
 const addCard = asyncHandler(async (req, res) => {
   const post = req.body;
   try {

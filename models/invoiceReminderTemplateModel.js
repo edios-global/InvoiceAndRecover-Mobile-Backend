@@ -2,41 +2,49 @@ import mongoose from 'mongoose';
 import paginate from "mongoose-paginate-v2";
 import aggregatePaginate from "mongoose-aggregate-paginate-v2";
 
-const invoiceReminderTemplateSchema = mongoose.Schema(
+const invoiceReminderSchema = mongoose.Schema(
     {
         businessUserID: {
             type: mongoose.Schema.Types.ObjectId,
-            required: true,
         },
         reminderTemplateName: {
             type: String,
             required: true,
         },
-        status: {
+        Status: {
             type: String,
-        },
-        emailSubject: {
-            type: String,
+            required: true,
+            default: "Active"
         },
         reminderType: {
             type: String,
+            required: true,
+            default: "Overdue By"
         },
         reminderDays: {
             type: Number,
+            required: true,
         },
-        uploadLegalDocument: {
+        legalDocumentStatus: {
+            type: Boolean,
+            required: true,
+            default: false
+        },
+        legalDocumentID: {
+            type: mongoose.Schema.Types.ObjectId,
+        },
+        emailSubject: {
             type: String,
+            required: false,
         },
         emailBody: {
             type: String,
-        },
-        createdBy: {
-            type: Number,
-            required: false,
+            // required: true,
         },
         createdDate: {
             type: Date,
             required: true,
+            default: new Date(new Date() - (new Date().getTimezoneOffset() * 60000)),
         },
         lastModifiedDate: {
             type: Date,
@@ -49,10 +57,9 @@ const invoiceReminderTemplateSchema = mongoose.Schema(
             required: true,
             default: 'I',
         }
-
-    })
-invoiceReminderTemplateSchema.plugin(paginate);
-invoiceReminderTemplateSchema.plugin(aggregatePaginate);
-const invoiceReminderTemplate = mongoose.model('invoiceremindertemplates', invoiceReminderTemplateSchema)
-
-export default invoiceReminderTemplate;
+    }
+)
+invoiceReminderSchema.plugin(paginate);
+invoiceReminderSchema.plugin(aggregatePaginate);
+const InvoiceReminder = mongoose.model('invoiceReminderTemplate', invoiceReminderSchema)
+export default InvoiceReminder;
